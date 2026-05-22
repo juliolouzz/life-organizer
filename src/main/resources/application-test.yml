@@ -1,0 +1,21 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+
+logging:
+  level:
+    root: WARN
+    com.julio.lifeorganizer: INFO
+    org.hibernate.SQL: WARN
+    org.testcontainers: WARN
+
+app:
+  jwt:
+    secret: "test-jwt-secret-32-chars-minimum-padding-padding"
+    access-ttl: 15m
+    refresh-ttl: 7d
+    clock-skew: 30s

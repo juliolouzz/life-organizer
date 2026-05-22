@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: life_organizer_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: life_organizer
+      POSTGRES_USER: life_organizer
+      POSTGRES_PASSWORD: life_organizer
+    ports:
+      - "5432:5432"
+    volumes:
+      - life_organizer_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U life_organizer -d life_organizer"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  life_organizer_pgdata:
