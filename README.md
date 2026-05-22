@@ -91,7 +91,42 @@ src/main/java/com/julio/lifeorganizer/
 
 ## Status
 
-Active development. See [`docs/specs/slice-1-plan.md`](docs/specs/slice-1-plan.md) for current progress through the 8-phase plan.
+**Slice 1 complete.** All 9 endpoints implemented, 52 tests pass via `mvn verify`,
+JaCoCo gate met (≥80% on service + web packages), ArchUnit rules enforced, full
+register → login → /me → transaction CRUD flow validated end-to-end against a
+live Postgres ([run evidence](docs/run-evidence.md)).
+
+### Acceptance Criteria coverage
+
+| Category | Count | Status |
+|---|---|---|
+| AC-A1..A16 — Auth & User | 16 | implemented + tested |
+| AC-T1..T23 — Transactions | 23 | implemented + tested |
+| AC-X1..X13 — Cross-cutting | 13 | implemented + tested |
+| **Total** | **52** | **all covered** |
+
+### Test summary
+
+```
+Unit tests:        21  (ApiResponse, ExceptionHierarchy, JwtService,
+                        CursorCodec, RequestIdFilter, Architecture)
+Integration tests: 25  (Schema, JPA repositories, AuthFlow,
+                        TransactionFlow, Health, Smoke)
+Total:             52  passing
+```
+
+### What's next
+
+Slice 1 is API-only by design. Future slices may add:
+
+- Web UI (Angular or React) consuming this API
+- Health / fitness vertical
+- Diary / notes vertical
+- Reports, budgets, recurring transactions
+- Production profile + deployment pipeline
+
+See [`docs/specs/slice-1-spec.txt`](docs/specs/slice-1-spec.txt) section 9 for the
+explicitly deferred scope.
 
 ## License
 
