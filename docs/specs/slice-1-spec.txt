@@ -1,0 +1,497 @@
+================================================================================
+LIFE ORGANIZER — SLICE 1 SPECIFICATION & DESIGN DECISIONS
+================================================================================
+Project       : Life Organizer (personal learning project)
+Slice         : 1 — Users + JWT auth + Transactions CRUD
+Stack         : Java 21 · Spring Boot 3 · PostgreSQL 16 · Flyway · JPA/Hibernate
+                JUnit 5 · Mockito · Testcontainers · Maven · Docker Compose
+Approved by   : julio.cdl.vet@gmail.com
+Approval date : 2026-05-14
+Status        : APPROVED — ready for /arch then /plan then /tdd
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1. DECISIONS LEDGER (LOCKED)
+--------------------------------------------------------------------------------
+
+#   Decision
+--- ----------------------------------------------------------------------------
+1   Registration: email + password + displayName
+2   Email verification: deferred
+3   Password policy: min 8 chars, >= 1 letter and >= 1 digit
+4   Password reset: deferred
+5   Login identifier: email only
+6   Failed-login lockout / IP rate limit: deferred
+7a  JWT model: access + refresh pair
+7b  Access token TTL: 15 minutes
+7c  Refresh token TTL: 7 days
+7d  Signing algorithm: HS256
+7e  Server-side revocation: none (TTL-based only)
+8   User profile endpoints in slice 1: GET /me only
+9   Roles: ROLE_USER + ROLE_ADMIN provisioned (admin unused in slice 1)
+10  Self-registration: open to anyone
+11  Transaction fields: amount, transactionDate, description, type, category
+12  Currency: fixed BRL, not stored on rows
+13  Amount precision: NUMERIC(15, 2)
+14  Dates: transactionDate (LocalDate) + createdAt/updatedAt (Instant)
+15  Category: free-text string, max 50 chars
+16  Account/wallet concept: deferred — transactions belong directly to user
+17  Delete: soft delete via deletedAt column
+18  Pagination: keyset, default limit 20, max 100
+19  List filters in slice 1: date range only (from, to)
+20  Default sort: transactionDate DESC, id DESC (not configurable)
+21  Update: PUT only (full replace)
+22  Volume limits: unlimited
+23  Authorization: each user sees only their own transactions, JWT subject enforced
+24  Idempotency keys: deferred
+25  Concurrent updates: last-write-wins (no @Version)
+26  Rate limiting: deferred
+27  Audit trail: skipped (owner is implicit)
+28  Validation errors: field errors in meta map
+29  Profiles: local + test (prod deferred)
+30  Observability: /actuator/health only
+
+
+--------------------------------------------------------------------------------
+2. TECHNICAL ASSUMPTIONS (NOT NEGOTIABLE WITHIN SLICE 1)
+--------------------------------------------------------------------------------
+
+* API base path: /api/v1
+* Response envelope: ApiResponse<T> { success, data, message, meta }
+* Password hashing: BCrypt, strength 12
+* IDs: BIGINT GENERATED ALWAYS AS IDENTITY
+* Timestamps: TIMESTAMPTZ in Postgres; Instant in Java; UTC
+* DTOs: Java 21 records
+* Validation: Jakarta Bean Validation
+* Exception handling: domain exception hierarchy + @RestControllerAdvice
+* Tests: @Tag("unit") and @Tag("integration"); Testcontainers for integration
+* Build/run: Maven; docker compose runs Postgres 16
+* Logging: SLF4J + Logback; JSON in prod profile, human-readable in local
+* Constructor injection only, all dependencies final
+* Conventional commits; feature branch from main
+
+
+--------------------------------------------------------------------------------
+3. FEATURE SUMMARY
+--------------------------------------------------------------------------------
+
+Slice 1 delivers a multi-user, JWT-secured REST API for the Life Organizer's
+Finance vertical. Users can self-register, log in to receive a short-lived
+access token + 7-day refresh token, read their own profile, and perform full
+CRUD on their own financial transactions (income or expense entries). Every
+transaction is scoped to its owning user; the API rejects all attempts to
+access another user's data. Soft-deleted rows are retained but invisible. The
+slice is API-only and assumes a future frontend or CLI client.
+
+
+--------------------------------------------------------------------------------
+4. DATA MODEL
+--------------------------------------------------------------------------------
+
+4.1 users
+---------
+id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+email           VARCHAR(255)  NOT NULL UNIQUE         -- lowercased before insert
+password_hash   VARCHAR(72)   NOT NULL                -- BCrypt strength 12
+display_name    VARCHAR(100)  NOT NULL
+role            VARCHAR(20)   NOT NULL
+                CHECK (role IN ('ROLE_USER','ROLE_ADMIN'))
+                DEFAULT 'ROLE_USER'
+created_at      TIMESTAMPTZ   NOT NULL DEFAULT now()
+updated_at      TIMESTAMPTZ   NOT NULL DEFAULT now()
+
+Indexes: PK on id, unique on email.
+
+4.2 transactions
+----------------
+id                BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+user_id           BIGINT       NOT NULL REFERENCES users(id)
+amount            NUMERIC(15,2) NOT NULL CHECK (amount > 0)
+type              VARCHAR(10)  NOT NULL CHECK (type IN ('INCOME','EXPENSE'))
+category          VARCHAR(50)  NOT NULL
+description       VARCHAR(255) NOT NULL
+transaction_date  DATE         NOT NULL
+deleted_at        TIMESTAMPTZ  NULL                   -- soft delete marker
+created_at        TIMESTAMPTZ  NOT NULL DEFAULT now()
+updated_at        TIMESTAMPTZ  NOT NULL DEFAULT now()
+
+Indexes:
+  PRIMARY KEY (id)
+  INDEX idx_transactions_user_id (user_id)
+  PARTIAL INDEX idx_transactions_user_active
+    ON (user_id, transaction_date DESC, id DESC)
+    WHERE deleted_at IS NULL
+
+4.3 Refresh tokens — stateless
+------------------------------
+No refresh_tokens table in slice 1. Refresh tokens are self-contained signed
+JWTs with typ="refresh", sub=<userId>, iat, exp (7 days). Access tokens have
+typ="access", sub, email, role, iat, exp (15 min). Both signed HS256 with the
+JWT_SECRET env var.
+
+
+--------------------------------------------------------------------------------
+5. RESPONSE ENVELOPE
+--------------------------------------------------------------------------------
+
+All responses (success + error) use:
+
+{
+  "success": true|false,
+  "data": <T> | null,
+  "message": "<human readable>" | null,
+  "meta": { ... } | null
+}
+
+- data is non-null on success only.
+- Validation errors: meta is a flat map of fieldName -> human message.
+- Business errors: meta contains { "code": "<ERROR_CODE>" }.
+- Paginated lists: meta contains { "nextCursor": <id>|null, "limit": <int> }.
+
+
+--------------------------------------------------------------------------------
+6. ENDPOINTS
+--------------------------------------------------------------------------------
+
+Summary
+-------
+#  Method   Path                              Auth         Success
+1  POST     /api/v1/auth/register             none         201
+2  POST     /api/v1/auth/login                none         200
+3  POST     /api/v1/auth/refresh              refresh JWT  200
+4  GET      /api/v1/me                        access JWT   200
+5  POST     /api/v1/transactions              access JWT   201
+6  GET      /api/v1/transactions              access JWT   200
+7  GET      /api/v1/transactions/{id}         access JWT   200
+8  PUT      /api/v1/transactions/{id}         access JWT   200
+9  DELETE   /api/v1/transactions/{id}         access JWT   204
+
+
+6.1 POST /api/v1/auth/register
+------------------------------
+Request:
+  { "email": "julio@example.com",
+    "password": "S3cretValue",
+    "displayName": "Julio" }
+
+Validation:
+  email        required, valid RFC 5322, <= 255 chars, normalized lowercase
+  password     required, 8-100 chars, >= 1 letter and >= 1 digit
+  displayName  required, 2-100 chars after trim, not blank
+
+Success 201:
+  { success:true,
+    data: { id, email, displayName, role },
+    message:null, meta:null }
+
+Errors:
+  400  validation fails              meta = per-field map
+  409  email already registered      meta.code = USER_EMAIL_EXISTS
+  400  malformed JSON                meta.code = MALFORMED_REQUEST
+
+
+6.2 POST /api/v1/auth/login
+---------------------------
+Request:
+  { "email": "...", "password": "..." }
+
+Success 200:
+  { success:true,
+    data: { accessToken, refreshToken, tokenType:"Bearer", expiresIn:900 },
+    message:null, meta:null }
+
+Errors:
+  401  wrong password OR unknown email (identical body — no enumeration)
+       message = "Invalid email or password"
+       meta.code = INVALID_CREDENTIALS
+  400  blank email/password                meta = per-field map
+
+
+6.3 POST /api/v1/auth/refresh
+-----------------------------
+Request:
+  { "refreshToken": "..." }
+
+Success 200:
+  { success:true,
+    data: { accessToken, tokenType:"Bearer", expiresIn:900 },
+    message:null, meta:null }
+
+Note: refresh-token rotation NOT implemented; original refresh token remains
+valid until expiry.
+
+Errors:
+  400  token missing/blank                  validation map
+  401  invalid signature / malformed        meta.code = INVALID_TOKEN
+  401  wrong typ claim                      meta.code = INVALID_TOKEN
+  401  expired                              meta.code = TOKEN_EXPIRED
+  401  user deleted since token issued      meta.code = USER_NOT_FOUND
+
+
+6.4 GET /api/v1/me
+------------------
+Headers: Authorization: Bearer <accessToken>
+
+Success 200:
+  { success:true,
+    data: { id, email, displayName, role },
+    message:null, meta:null }
+
+Errors:
+  401  no Authorization header / not Bearer   meta.code = UNAUTHORIZED
+  401  invalid access token                   meta.code = INVALID_TOKEN
+  401  expired access token                   meta.code = TOKEN_EXPIRED
+  401  user deleted                           meta.code = USER_NOT_FOUND
+
+
+6.5 POST /api/v1/transactions
+-----------------------------
+Headers: Authorization: Bearer <accessToken>
+
+Request:
+  { "amount": 1499.90,
+    "type": "EXPENSE",
+    "category": "Groceries",
+    "description": "Weekly supermarket run",
+    "transactionDate": "2026-05-12" }
+
+Validation:
+  amount           required, > 0, scale <= 2, integer part <= 13 digits
+  type             required, INCOME or EXPENSE
+  category         required, 1-50 chars after trim, not blank
+  description      required, 1-255 chars after trim, not blank
+  transactionDate  required, ISO yyyy-MM-dd, any value allowed
+
+user_id is taken from JWT subject; any userId in body is ignored.
+
+Success 201:
+  { success:true,
+    data: { id, amount, type, category, description, transactionDate,
+            createdAt, updatedAt },
+    message:null, meta:null }
+
+Errors:
+  400  validation fails       meta = per-field map
+  401  auth failures          (see 6.4)
+
+
+6.6 GET /api/v1/transactions
+----------------------------
+Query parameters:
+  cursor   string     optional, opaque base64 token from previous page
+  limit    int        optional, default 20, range [1, 100]
+  from     LocalDate  optional, ISO yyyy-MM-dd
+  to       LocalDate  optional, ISO yyyy-MM-dd
+                      if both supplied, from <= to
+
+Behavior:
+- WHERE user_id = <JWT subject> AND deleted_at IS NULL
+- ORDER BY transaction_date DESC, id DESC
+- Keyset (amendment 1): cursor = base64("<transactionDate>_<id>"). When supplied,
+  decoded yields (cursorDate, cursorId); WHERE clause becomes
+    (transaction_date < :cursorDate)
+    OR (transaction_date = :cursorDate AND id < :cursorId)
+- Date filter is inclusive on both bounds
+
+Success 200:
+  { success:true,
+    data: [ {transaction}, ... ],
+    message:null,
+    meta: { nextCursor: "<opaqueBase64Token>"|null, limit: 20 } }
+
+Errors:
+  400  limit out of range                          meta.code = INVALID_QUERY
+  400  from > to                                   meta.code = INVALID_QUERY
+  400  cursor not valid base64 / malformed token   meta.code = INVALID_QUERY
+  401  auth failures
+
+
+6.7 GET /api/v1/transactions/{id}
+---------------------------------
+Success 200: same shape as 6.5.
+
+Errors:
+  404  id not found OR belongs to another user OR soft-deleted
+       message = "Transaction not found"
+       meta.code = TRANSACTION_NOT_FOUND   (IDENTICAL body in all 3 cases)
+  401  auth failures
+
+
+6.8 PUT /api/v1/transactions/{id}
+---------------------------------
+Request: identical schema to 6.5 (full replacement).
+
+Behavior: replaces all 5 fields; refreshes updated_at; id/user_id/created_at/
+deleted_at never modifiable from body.
+
+Success 200: same shape as 6.5.
+
+Errors:
+  400  validation fails               meta = per-field map
+  404  not found / not owner / soft-deleted   meta.code = TRANSACTION_NOT_FOUND
+  401  auth failures
+
+
+6.9 DELETE /api/v1/transactions/{id}
+------------------------------------
+Behavior: sets deleted_at = now(). Row retained; invisible to GETs and to a
+second DELETE.
+
+Success 204: no body.
+
+Errors:
+  404  not found / not owner / already soft-deleted
+       meta.code = TRANSACTION_NOT_FOUND
+  401  auth failures
+
+
+--------------------------------------------------------------------------------
+7. STATE TRANSITIONS
+--------------------------------------------------------------------------------
+
+7.1 User
+  [non-existent] --register--> [active]
+  (No other transitions in slice 1.)
+
+7.2 Transaction
+  [non-existent] --POST--> [ACTIVE]
+  [ACTIVE]       --PUT-->  [ACTIVE]          (fields replaced)
+  [ACTIVE]       --DELETE--> [SOFT_DELETED]  (deleted_at = now())
+  [SOFT_DELETED] --any-->   [SOFT_DELETED]   (treated as 404)
+
+  Undelete (SOFT_DELETED -> ACTIVE) is NOT supported in slice 1.
+
+
+--------------------------------------------------------------------------------
+8. ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+
+Auth & User
+-----------
+AC-A1   POST /auth/register with valid body creates a users row with BCrypt-
+        hashed password, lowercased email, role='ROLE_USER', returns 201 +
+        { id, email, displayName, role }.
+AC-A2   Duplicate email (any case) returns 409, meta.code=USER_EMAIL_EXISTS.
+AC-A3   Invalid email format returns 400 with meta.email populated.
+AC-A4   Password failing policy returns 400 with meta.password populated.
+AC-A5   Blank or 1-char displayName returns 400 with meta.displayName populated.
+AC-A6   POST /auth/login with correct credentials returns 200 + signed JWTs:
+        access TTL 900s, refresh TTL 604800s, HS256, sub=userId, typ claim
+        differentiates.
+AC-A7   Wrong password returns 401 INVALID_CREDENTIALS.
+AC-A8   Unknown email returns 401 INVALID_CREDENTIALS with IDENTICAL body to A7.
+AC-A9   POST /auth/refresh with valid unexpired token returns 200 + new access.
+AC-A10  Refresh with typ != "refresh" returns 401 INVALID_TOKEN.
+AC-A11  Expired refresh returns 401 TOKEN_EXPIRED.
+AC-A12  GET /me with valid token returns the authenticated user.
+AC-A13  GET /me without Bearer returns 401 UNAUTHORIZED.
+AC-A14  GET /me with expired access returns 401 TOKEN_EXPIRED.
+AC-A15  Secret from env var JWT_SECRET; missing on boot fails fast.
+AC-A16  Password hashes never appear in any response body or log.
+
+Transactions
+------------
+AC-T1   POST /transactions creates row with user_id = JWT subject; returns 201.
+AC-T2   Server ignores any userId in body — only JWT sets ownership.
+AC-T3   amount <= 0 -> 400.
+AC-T4   amount with > 2 decimal places -> 400.
+AC-T5   type not in {INCOME, EXPENSE} -> 400.
+AC-T6   description blank or > 255 -> 400.
+AC-T7   category blank or > 50 -> 400.
+AC-T8   transactionDate malformed or missing -> 400; past/present/future ok.
+AC-T9   GET /transactions returns only user_id=JWT subject AND deleted_at IS NULL.
+AC-T10  Results sorted transaction_date DESC, id DESC.
+AC-T11  limit=20 -> at most 20 items; meta.nextCursor = opaque base64 token
+        encoding the last row's "<transactionDate>_<id>", or null when fewer
+        than 20 returned.
+AC-T12  cursor=T -> only items strictly older than T per composite sort:
+        (transaction_date < cursorDate) OR
+        (transaction_date = cursorDate AND id < cursorId).
+AC-T13  limit=101 -> 400 INVALID_QUERY.
+AC-T14  limit=0 -> 400 INVALID_QUERY.
+AC-T15  from/to filter inclusive on both bounds.
+AC-T16  from > to -> 400 INVALID_QUERY.
+AC-T17  GET /transactions/{id} -> 200 when owned and active.
+AC-T18  GET /transactions/{id} -> 404 TRANSACTION_NOT_FOUND when missing OR
+        not owner OR soft-deleted — IDENTICAL body in all 3 cases.
+AC-T19  PUT replaces all 5 fields, bumps updatedAt; id/user_id/created_at/
+        deleted_at unchanged.
+AC-T20  PUT -> 404 under same 3 conditions as AC-T18.
+AC-T21  DELETE sets deleted_at = now(), returns 204.
+AC-T22  Soft-deleted row invisible to all GETs; second DELETE -> 404.
+AC-T23  All transaction endpoints -> 401 without valid access token.
+
+Cross-cutting
+-------------
+AC-X1   Every response conforms to ApiResponse<T> envelope.
+AC-X2   Validation errors -> 400 with meta as flat Map<String,String>.
+AC-X3   Unhandled exceptions -> 500 with generic message; no stack/SQL leak.
+AC-X4   Exceptions logged at ERROR with URI and JWT subject when available.
+AC-X5   Line coverage >= 80% on service + controller packages (JaCoCo).
+AC-X6   Integration tests use Testcontainers Postgres 16; same Flyway as local.
+AC-X7   Flyway migrations: V1__create_users_table.sql,
+        V2__create_transactions_table.sql; run clean.
+AC-X8   docker compose up starts Postgres on localhost:5432; creds via .env
+        (template committed, real values gitignored).
+AC-X9   /actuator/health returns 200 {"status":"UP"} when DB reachable.
+AC-X10  No System.out.println, no printStackTrace, no hardcoded secrets.
+AC-X11  All dependencies injected via constructor with final fields.
+AC-X12  All DTOs are Java records.
+AC-X13  Conventional commits used throughout.
+
+
+--------------------------------------------------------------------------------
+9. OUT OF SCOPE (SLICE 1)
+--------------------------------------------------------------------------------
+
+Explicitly NOT included:
+
+* Email verification flow
+* Password reset / "forgot password"
+* Failed-login lockout, captcha, per-IP rate limiting
+* Profile update, password change, account deletion endpoints
+* Admin endpoints (ROLE_ADMIN provisioned but unused)
+* Server-side token revocation, logout endpoint, refresh-token rotation
+* Multi-currency / FX / currency conversions
+* Categories as their own entity (Category CRUD comes later)
+* Accounts / wallets / balances / running totals
+* List filters beyond from/to (type, category, amount range — later)
+* PATCH /transactions/{id} (partial updates)
+* Hard delete / restore-from-soft-delete
+* Idempotency-Key headers
+* Optimistic locking (@Version)
+* Audit columns (created_by, updated_by, change history)
+* Recurring transactions, budgets, alerts
+* Reports, dashboards, aggregations
+* File uploads (receipts/attachments)
+* Bulk import (CSV/OFX)
+* Webhooks
+* Metrics (/actuator/prometheus, custom Micrometer)
+* prod Spring profile / deployment manifests / Kubernetes
+* CI/CD pipeline (separate slice)
+* Frontend (Angular/React)
+* Health/fitness, diary, reminders, dashboard verticals — future slices
+
+
+================================================================================
+AMENDMENTS LOG
+================================================================================
+
+2026-05-14 — Amendment 1 (cursor design correctness)
+  Reason   : ADR-009 / Risk R9 — original AC-T11/T12 specified cursor as a raw
+             last-seen id with predicate `id < cursor`, which produces duplicate
+             rows on subsequent pages whenever two transactions share a date but
+             differ in id, because secondary sort is (transaction_date, id).
+  Change   : cursor is now an opaque base64 token encoding "<date>_<id>";
+             keyset predicate is composite:
+                 (transaction_date < cursorDate)
+              OR (transaction_date = cursorDate AND id < cursorId)
+  Affects  : Section 6.6 (query parameters, behavior, success body, errors),
+             AC-T11, AC-T12.
+  Approved : julio.cdl.vet@gmail.com, 2026-05-14.
+
+
+================================================================================
+END OF SPEC — Slice 1
+================================================================================
