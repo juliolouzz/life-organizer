@@ -86,8 +86,8 @@ class TransactionPersistenceTest extends AbstractJpaTest {
                 other.getId(), new BigDecimal("3.00"),
                 TransactionType.INCOME, "c", "c", LocalDate.of(2026, 5, 20)));
 
-        var page = transactionRepository.findPage(
-                owner.getId(), null, null, null, null,
+        var page = transactionRepository.findFirstPage(
+                owner.getId(), null, null,
                 org.springframework.data.domain.PageRequest.of(0, 10));
 
         assertThat(page).extracting(TransactionEntity::getId)
