@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/life_organizer
+    username: life_organizer
+    password: life_organizer
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    com.julio.lifeorganizer: DEBUG
+    org.hibernate.SQL: DEBUG

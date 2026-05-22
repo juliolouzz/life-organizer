@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: life-organizer
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/life_organizer}
+    username: ${DB_USERNAME:life_organizer}
+    password: ${DB_PASSWORD:life_organizer}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+    locations: classpath:db/migration
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: false
+    serialization:
+      write-dates-as-timestamps: false
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-ttl: 15m
+    refresh-ttl: 7d
+    clock-skew: 30s
+  pagination:
+    default-limit: 20
+    max-limit: 100
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: when-authorized
+  health:
+    db:
+      enabled: true
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level [requestId=%X{requestId:-}] %logger{36} - %msg%n"
+  level:
+    root: INFO
+    com.julio.lifeorganizer: INFO
