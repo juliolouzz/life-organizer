@@ -12,6 +12,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state/empty-s
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
 import { MoneyBrlPipe } from '../../shared/pipes/money-brl.pipe';
 import { CategoryDonutComponent } from './widgets/category-donut.component';
+import { BudgetsWidgetComponent } from './widgets/budgets-widget.component';
 import { IncomeExpenseChartComponent } from './widgets/income-expense-chart.component';
 import { StatCardComponent } from './widgets/stat-card.component';
 import {
@@ -41,6 +42,7 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
     StatCardComponent,
     IncomeExpenseChartComponent,
     CategoryDonutComponent,
+    BudgetsWidgetComponent,
     PeriodSelectorComponent,
     MoneyBrlPipe
   ],
@@ -132,6 +134,10 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
           [granularity]="granularity()"
         />
         <app-category-donut [categories]="categories()" />
+      </section>
+
+      <section class="budgets-section">
+        <app-budgets-widget [year]="currentYear()" [month]="currentMonth()" />
       </section>
 
       <section class="recent-section">
@@ -298,6 +304,11 @@ export class DashboardPage implements OnInit {
     if (!s) return false;
     return s.incomeCount + s.expenseCount + (s.savingsCount ?? 0) === 0;
   });
+
+  // Budgets widget always shows the CURRENT calendar month, regardless of the dashboard
+  // period selector. People budget by calendar month, not arbitrary date ranges.
+  protected readonly currentYear = signal(new Date().getFullYear());
+  protected readonly currentMonth = signal(new Date().getMonth() + 1);
 
   protected readonly Number = Number;
 

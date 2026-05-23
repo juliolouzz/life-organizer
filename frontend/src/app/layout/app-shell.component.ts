@@ -61,6 +61,33 @@ import { ThemeService } from '../core/theme/theme.service';
           </a>
           <a
             mat-list-item
+            routerLink="/budgets"
+            routerLinkActive="active"
+            class="nav-item"
+          >
+            <span class="material-symbols-outlined nav-icon">flag</span>
+            Budgets
+          </a>
+          <a
+            mat-list-item
+            routerLink="/recurring"
+            routerLinkActive="active"
+            class="nav-item"
+          >
+            <span class="material-symbols-outlined nav-icon">event_repeat</span>
+            Recurring
+          </a>
+          <a
+            mat-list-item
+            routerLink="/categories"
+            routerLinkActive="active"
+            class="nav-item"
+          >
+            <span class="material-symbols-outlined nav-icon">folder</span>
+            Categories
+          </a>
+          <a
+            mat-list-item
             routerLink="/profile"
             routerLinkActive="active"
             class="nav-item"
