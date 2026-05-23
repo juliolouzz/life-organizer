@@ -3,7 +3,7 @@ LIFE ORGANIZER - SLICE 8 SPECIFICATION
 ================================================================================
 Project       : Life Organizer
 Slice         : 8 - Auth completeness (password reset + email verification + rate limiting)
-Status        : APPROVED - building this slice
+Status        : DELIVERED (merged PR #15 on 2026-05-23)
 ================================================================================
 
 
@@ -164,5 +164,78 @@ AC-8-13  All new endpoints reject 401 without a Bearer token where the spec
 
 
 ================================================================================
-END OF SPEC - Slice 8
+END OF SPEC - Slice 8 (original)
+================================================================================
+
+
+--------------------------------------------------------------------------------
+AMENDMENTS (post-security-review on PR #15, 2026-05-23)
+--------------------------------------------------------------------------------
+
+A-1  [Decision 6 SUPERSEDED]
+     Original: "verify and reset links are written to the backend log (INFO)".
+     Revised:  Tokens are NEVER written to the application logger. The logger
+               records only event metadata (kind, userId, email). The link is
+               surfaced via a new component AuthDevDeliveryProperties which
+               appends to an opt-in local file (default
+               .tmp/auth-dev-links.txt). The file is written ONLY when
+               app.auth.dev-delivery.enabled=true, and only the "local" profile
+               sets that. Production deployments leave it disabled - tokens
+               stay in memory until (a future slice) SMTP carries them out.
+     Why:      CodeQL flagged the token-in-log pattern as java/sensitive-log
+               (CWE-532). Anyone with docker logs / log aggregator access
+               could hijack accounts during the token TTL. The file-based
+               sink narrows that exposure to filesystem access and never
+               leaves the host by default.
+
+A-2  [Decision 10 SUPERSEDED]
+     Original: "After a successful password reset, no automatic invalidation
+                of other tokens (deferred - proper logout-everywhere is a
+                Slice 10+ feature)."
+     Revised:  Password reset tokens are bound to a SHA-256 fingerprint of
+               the user's current password hash (claim "pwdv"). Once the
+               password is changed, the fingerprint differs and any prior
+               reset token is rejected with INVALID_TOKEN. Effectively
+               single-use. Refresh / access tokens are NOT bound in this
+               slice - server-side invalidation of those remains a future
+               slice (would need a token-version column on users).
+     Why:      A 1h-TTL reset token is itself a credential. If leaked via
+               referrer / browser history / log exfiltration it remained
+               valid even after the legitimate owner had reset. Single-use
+               binding closes the window without server-side state.
+
+A-3  [Decision 7 EXPANDED]
+     Original: rate limiter applies to /login, /register, /forgot-password.
+     Revised:  Also applies to /reset-password, /verify-email,
+               /resend-verification. Defense in depth: brute-forcing the
+               HS256 signature is infeasible, but rate limiting blocks DoS
+               via repeated bcrypt comparisons and reduces noise.
+
+A-4  [New invariants]
+     - Referrer-Policy: no-referrer set globally via Spring Security headers,
+       so token URLs do not leak via the Referer header.
+     - Frontend /reset-password and /verify-email pages call Router.navigate
+       with {token: null, replaceUrl: true} after reading the token, so it
+       does not persist in browser history.
+     - /forgot-password and /resend-verification do equivalent JWT-signing
+       work in both branches (email exists / does not exist), so response
+       time does not leak whether the email is registered.
+
+A-5  [CodeQL configuration]
+     The query java/spring-disabled-csrf-protection is suppressed via
+     .github/codeql/codeql-config.yml. CSRF disabling is correct for a
+     stateless API authenticated only by JWTs in the Authorization header
+     (no ambient cookie credential for an attacker to ride on). Rationale
+     is documented inline in SecurityConfig.java. If cookie/session auth
+     is ever introduced, this suppression must be removed.
+
+A-6  [Acceptance criterion added]
+     AC-8-14  A reset token used to change a password cannot be reused: a
+              second POST /auth/reset-password with the same token returns
+              401 INVALID_TOKEN. Verified by
+              AuthCompletenessIntegrationTest#resetPassword_tokenCannotBeReusedAfterPasswordChange.
+
+
+================================================================================
+END OF SPEC - Slice 8 (with amendments)
 ================================================================================
