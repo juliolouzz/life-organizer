@@ -1,0 +1,180 @@
+================================================================================
+LIFE ORGANIZER - SLICE 12 SPECIFICATION
+================================================================================
+Project       : Life Organizer
+Slice         : 12 - Refresh-token revocation (sign out everywhere + password-change auto-bump)
+Status        : APPROVED - building this slice
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1. WHY
+--------------------------------------------------------------------------------
+
+By Slice 11 the auth story is functionally complete except for one stubborn
+gap: there is no way to invalidate a refresh token. If a refresh token leaks
+(stolen phone, hijacked session, shared device), changing the password does
+nothing - the leaked token keeps minting fresh access tokens until it expires
+days later. Slice 1 explicitly deferred this to a future slice; Slice 12 is
+that slice.
+
+
+--------------------------------------------------------------------------------
+2. DECISIONS LEDGER (LOCKED)
+--------------------------------------------------------------------------------
+
+#   Decision
+--- ----------------------------------------------------------------------------
+1   Add users.token_version INTEGER NOT NULL DEFAULT 0. Bumping it
+    invalidates every access and refresh token previously issued for that
+    user. No per-token revocation list - we use a single epoch per user.
+
+2   Every JWT issued by JwtService carries a "tv" claim equal to the user's
+    current token_version. Applies to access, refresh, password_reset,
+    verify_email, change_email, and account_restore tokens (the same way
+    pwdv already applies to most of them).
+
+3   JwtAuthenticationFilter, after parsing the access token and loading the
+    user (which it already does for the deletion gate), compares the tv
+    claim to user.token_version. Mismatch -> 401 INVALID_TOKEN.
+
+4   AuthService.refresh similarly checks tv against the current user.
+    Mismatch -> 401 INVALID_TOKEN, user must log in again.
+
+5   New endpoint POST /api/v1/me/sessions/logout-all
+    Body: { "password": "..." }
+    - verifies password (sensitive op; same guard as /me/delete)
+    - increments user.token_version
+    - returns 200 with { "message": "Signed out of all sessions" }
+    Side effect: the calling session is ALSO signed out - its access token
+    no longer passes the JwtAuthenticationFilter tv check.
+
+6   AccountService.changePassword (existing /me/password) ALSO increments
+    token_version. Rationale: a stolen refresh token that survives a
+    password change has been a real-world breach pattern. Bumping on
+    password change closes the gap without requiring the user to remember
+    to click "sign out everywhere" too.
+
+7   Password-reset confirmation (AuthService.resetPassword) ALSO increments
+    token_version. Same reasoning - the user just took an account-recovery
+    action and any pre-existing session should be terminated.
+
+8   Account-restore (AuthService.confirmAccountRestore, AccountService.cancelOwnDeletion)
+    does NOT bump. The user is re-asserting control of a not-yet-deleted
+    account; their existing tokens were already invalidated by the deletion
+    gate while it was active, and the gate is now off.
+
+9   Email-change confirmation does NOT bump. The credentials are unchanged;
+    other sessions remain legitimately the same user.
+
+10  Display-name change does NOT bump. Cosmetic.
+
+11  Database migration V9:
+    ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0;
+    No index - the column is only read alongside the user row (already a
+    PK lookup).
+
+12  Rate limiting: /me/sessions/logout-all is added to RateLimitFilter (it
+    takes a password and triggers a write, same risk profile as /me/delete).
+
+
+--------------------------------------------------------------------------------
+3. NEW + CHANGED ENDPOINTS
+--------------------------------------------------------------------------------
+
+POST /api/v1/me/sessions/logout-all      (auth required)
+Body:    { "password": "..." }
+200 OK:  { "success": true, "data": null, "message": "Signed out of all sessions" }
+401 INVALID_CREDENTIALS if password wrong
+401 INVALID_TOKEN if tv mismatch in the calling access token (extremely
+    unlikely - would require a race against a prior bump)
+
+
+--------------------------------------------------------------------------------
+4. CHANGES TO EXISTING BEHAVIOUR
+--------------------------------------------------------------------------------
+
+4.1 JwtAuthenticationFilter
+    Adds a tv check after the existing deletion-pending check. Both use
+    the same UserEntity lookup so this is a free extension.
+
+4.2 AuthService.refresh
+    Loads the user (already does for sub -> entity), compares the
+    refresh token's tv claim against user.token_version. On mismatch,
+    throws InvalidTokenException.
+
+4.3 AuthService.login (and register's auto-login)
+    Now includes the current token_version in the tv claim of both the
+    access and refresh tokens it issues.
+
+4.4 AccountService.changePassword
+    After persisting the new hash, increments token_version.
+
+4.5 AuthService.resetPassword
+    After persisting the new hash via the reset flow, increments
+    token_version (defense-in-depth on the recovery path).
+
+4.6 AccountService.requestAccountDeletion / cancelOwnDeletion
+    Unchanged. The deletion-pending gate continues to handle this case.
+
+
+--------------------------------------------------------------------------------
+5. FRONTEND CHANGES
+--------------------------------------------------------------------------------
+
+5.1 /profile page
+    - Inside the existing Password section (so it sits next to the password
+      change controls), add a "Sign out of all devices" button.
+    - On click: open a confirmation dialog asking for the user's password.
+    - On confirm: POST /me/sessions/logout-all, then on success:
+        - clear local tokens
+        - navigate to /login
+        - flash a success snackbar
+    - Wrong password: show inline error, do not log out.
+
+5.2 No other frontend changes. The tv check is invisible from the SPA's
+    point of view - it just means the refresh-token interceptor's next
+    refresh call returns 401, the interceptor catches and routes to /login.
+
+
+--------------------------------------------------------------------------------
+6. ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+
+AC-12-1   Every token issued by JwtService carries a "tv" claim that equals
+          the user's current token_version at issuance time.
+AC-12-2   POST /me/sessions/logout-all with the correct password increments
+          user.token_version by 1 and returns 200.
+AC-12-3   POST /me/sessions/logout-all with the wrong password returns 401
+          INVALID_CREDENTIALS and does NOT bump token_version.
+AC-12-4   After /me/sessions/logout-all, the SAME access token used to
+          issue the call is now rejected with 401 on any subsequent request
+          (its tv is stale).
+AC-12-5   After /me/sessions/logout-all, the SAME refresh token from the
+          calling session is rejected with 401 on /auth/refresh.
+AC-12-6   After POST /me/password (correct currentPassword + valid
+          newPassword), the prior refresh token is rejected with 401.
+AC-12-7   After /auth/reset-password (valid reset link), the prior refresh
+          token is rejected with 401.
+AC-12-8   Login + register issue tokens whose tv matches the user's current
+          token_version. Subsequent normal use is unaffected.
+AC-12-9   The deletion-pending gate (AC-9-11, AC-9-12) still works. Adding
+          the tv check is an AND of two checks, not a replacement.
+AC-12-10  /me/sessions/logout-all is rate-limited (5 per 15 min per IP).
+
+
+--------------------------------------------------------------------------------
+7. OUT OF SCOPE (SLICE 12)
+--------------------------------------------------------------------------------
+
+* Per-device session list ("you have 3 active sessions" UI).
+* Active-session log (where / when each device signed in).
+* Granular revocation - "sign out only that one device".
+* JWT denylist / revocation list (would defeat statelessness).
+* Sliding refresh-token rotation - the refresh token itself is unchanged
+  on each refresh. (Adding rotation is a separate slice candidate.)
+
+
+================================================================================
+END OF SPEC - Slice 12
+================================================================================
