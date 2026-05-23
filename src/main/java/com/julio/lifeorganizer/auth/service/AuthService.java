@@ -5,6 +5,8 @@ import com.julio.lifeorganizer.auth.persistence.UserEntity;
 import com.julio.lifeorganizer.auth.persistence.UserRepository;
 import com.julio.lifeorganizer.auth.web.dto.AccessTokenResponse;
 import com.julio.lifeorganizer.auth.web.dto.AuthTokensResponse;
+import com.julio.lifeorganizer.auth.web.dto.ConfirmAccountRestoreRequest;
+import com.julio.lifeorganizer.auth.web.dto.ConfirmEmailChangeRequest;
 import com.julio.lifeorganizer.auth.web.dto.ForgotPasswordRequest;
 import com.julio.lifeorganizer.auth.web.dto.LoginRequest;
 import com.julio.lifeorganizer.auth.web.dto.RefreshRequest;
@@ -12,10 +14,14 @@ import com.julio.lifeorganizer.auth.web.dto.RegisterRequest;
 import com.julio.lifeorganizer.auth.web.dto.ResetPasswordRequest;
 import com.julio.lifeorganizer.auth.web.dto.UserResponse;
 import com.julio.lifeorganizer.auth.web.dto.VerifyEmailRequest;
+import com.julio.lifeorganizer.common.exception.AccountDeletionPendingException;
+import com.julio.lifeorganizer.common.exception.AccountNotDeletingException;
 import com.julio.lifeorganizer.common.exception.ConflictException;
 import com.julio.lifeorganizer.common.exception.InvalidCredentialsException;
 import com.julio.lifeorganizer.common.exception.InvalidTokenException;
 import com.julio.lifeorganizer.common.exception.UserNotFoundForTokenException;
+import java.time.Clock;
+import java.time.Instant;
 import com.julio.lifeorganizer.config.AuthDevDeliveryProperties;
 import com.julio.lifeorganizer.config.JwtProperties;
 import io.jsonwebtoken.Claims;
@@ -50,17 +56,20 @@ public class AuthService {
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
     private final AuthDevDeliveryProperties devDelivery;
+    private final Clock clock;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
                        JwtProperties jwtProperties,
-                       AuthDevDeliveryProperties devDelivery) {
+                       AuthDevDeliveryProperties devDelivery,
+                       Clock clock) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.jwtProperties = jwtProperties;
         this.devDelivery = devDelivery;
+        this.clock = clock;
     }
 
     @Transactional
@@ -165,7 +174,62 @@ public class AuthService {
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new InvalidCredentialsException();
         }
+        // Account-state gate: a user with deletion scheduled must NOT be issued
+        // fresh tokens. We surface 403 (correct credentials, forbidden by state)
+        // with the scheduled date so the client can show the restore prompt.
+        if (user.isDeletionPending()) {
+            throw new AccountDeletionPendingException(user.getDeletionScheduledAt());
+        }
         return buildTokens(user);
+    }
+
+    @Transactional
+    public UserResponse confirmEmailChange(ConfirmEmailChangeRequest request) {
+        Claims claims = jwtService.parseChangeEmailToken(request.token());
+        Long userId = parseUserId(claims);
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(UserNotFoundForTokenException::new);
+        jwtService.verifyPasswordBinding(claims, user.getPasswordHash());
+        Object newEmailClaim = claims.get("new_email");
+        if (!(newEmailClaim instanceof String newEmail) || newEmail.isBlank()) {
+            throw new InvalidTokenException("Token is missing new_email claim");
+        }
+        // Re-check uniqueness at confirm time: someone else may have claimed
+        // the email between request and confirm.
+        if (!newEmail.equals(user.getEmail()) && userRepository.existsByEmail(newEmail)) {
+            throw new ConflictException("Email already registered", "USER_EMAIL_EXISTS");
+        }
+        user.changeEmail(newEmail);
+        return UserResponse.from(userRepository.save(user));
+    }
+
+    @Transactional
+    public UserResponse confirmAccountRestore(ConfirmAccountRestoreRequest request) {
+        Claims claims = jwtService.parseAccountRestoreToken(request.token());
+        Long userId = parseUserId(claims);
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(UserNotFoundForTokenException::new);
+        jwtService.verifyPasswordBinding(claims, user.getPasswordHash());
+        if (!user.isDeletionPending()) {
+            throw new AccountNotDeletingException();
+        }
+        Instant scheduled = user.getDeletionScheduledAt();
+        if (scheduled != null && !scheduled.isAfter(clock.instant())) {
+            // Grace period has elapsed - the next scheduled job run will hard-delete
+            // this user. Reject the restore so the user does not see a misleading
+            // "restored" message followed by data loss.
+            throw new AccountNotDeletingException();
+        }
+        user.cancelDeletion();
+        return UserResponse.from(userRepository.save(user));
+    }
+
+    private static Long parseUserId(Claims claims) {
+        try {
+            return Long.parseLong(claims.getSubject());
+        } catch (NumberFormatException ex) {
+            throw new InvalidTokenException("Token subject is not a valid user id");
+        }
     }
 
     public AccessTokenResponse refresh(RefreshRequest request) {

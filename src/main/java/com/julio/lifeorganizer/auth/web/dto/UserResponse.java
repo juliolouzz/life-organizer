@@ -1,8 +1,15 @@
 package com.julio.lifeorganizer.auth.web.dto;
 
 import com.julio.lifeorganizer.auth.persistence.UserEntity;
+import java.time.Instant;
 
-public record UserResponse(Long id, String email, String displayName, String role, boolean emailVerified) {
+public record UserResponse(
+        Long id,
+        String email,
+        String displayName,
+        String role,
+        boolean emailVerified,
+        Instant deletionScheduledAt) {
 
     public static UserResponse from(UserEntity user) {
         return new UserResponse(
@@ -10,7 +17,8 @@ public record UserResponse(Long id, String email, String displayName, String rol
                 user.getEmail(),
                 user.getDisplayName(),
                 user.getRole().name(),
-                user.isEmailVerified()
+                user.isEmailVerified(),
+                user.getDeletionScheduledAt()
         );
     }
 }

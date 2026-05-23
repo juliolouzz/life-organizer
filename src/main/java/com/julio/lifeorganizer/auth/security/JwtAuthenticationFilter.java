@@ -1,7 +1,10 @@
 package com.julio.lifeorganizer.auth.security;
 
 import com.julio.lifeorganizer.auth.domain.Role;
+import com.julio.lifeorganizer.auth.persistence.UserEntity;
+import com.julio.lifeorganizer.auth.persistence.UserRepository;
 import com.julio.lifeorganizer.auth.service.JwtService;
+import com.julio.lifeorganizer.common.exception.AccountDeletionPendingException;
 import com.julio.lifeorganizer.common.exception.AuthException;
 import com.julio.lifeorganizer.common.exception.InvalidTokenException;
 import io.jsonwebtoken.Claims;
@@ -10,7 +13,9 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.time.Clock;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -26,10 +31,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final HandlerExceptionResolver resolver;
+    private final UserRepository userRepository;
+    private final Clock clock;
 
-    public JwtAuthenticationFilter(JwtService jwtService, HandlerExceptionResolver resolver) {
+    public JwtAuthenticationFilter(JwtService jwtService,
+                                   HandlerExceptionResolver resolver,
+                                   UserRepository userRepository,
+                                   Clock clock) {
         this.jwtService = jwtService;
         this.resolver = resolver;
+        this.userRepository = userRepository;
+        this.clock = clock;
     }
 
     @Override
@@ -48,6 +60,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             Long id = Long.parseLong(claims.getSubject());
             String email = claims.get(JwtService.EMAIL_CLAIM, String.class);
             String role = claims.get(JwtService.ROLE_CLAIM, String.class);
+
+            // Account-state gate: a deletion pending user must not be allowed to
+            // ride out their access token. Skip the lookup when the user row is
+            // missing entirely (that path is handled by the controllers and is
+            // the same observable behaviour as "user not found for token").
+            Optional<UserEntity> maybeUser = userRepository.findById(id);
+            if (maybeUser.isPresent()) {
+                UserEntity user = maybeUser.get();
+                if (user.isDeletionPending()
+                        && user.getDeletionScheduledAt().isAfter(clock.instant())) {
+                    throw new AccountDeletionPendingException(user.getDeletionScheduledAt());
+                }
+            }
 
             AuthenticatedUser principal = new AuthenticatedUser(id, email, Role.valueOf(role));
             UsernamePasswordAuthenticationToken authentication =

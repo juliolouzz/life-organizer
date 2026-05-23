@@ -47,9 +47,12 @@ public class SecurityConfig {
             JwtService jwtService,
             JwtAuthenticationEntryPoint entryPoint,
             RateLimiter rateLimiter,
+            com.julio.lifeorganizer.auth.persistence.UserRepository userRepository,
+            Clock clock,
             @Qualifier("handlerExceptionResolver") HandlerExceptionResolver resolver) throws Exception {
 
-        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, resolver);
+        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(
+                jwtService, resolver, userRepository, clock);
         RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiter, resolver, rateLimitEnabled);
 
         http
@@ -77,7 +80,9 @@ public class SecurityConfig {
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password",
                                 "/api/v1/auth/verify-email",
-                                "/api/v1/auth/resend-verification").permitAll()
+                                "/api/v1/auth/resend-verification",
+                                "/api/v1/auth/confirm-email-change",
+                                "/api/v1/auth/confirm-account-restore").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)

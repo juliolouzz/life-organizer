@@ -3,6 +3,8 @@ package com.julio.lifeorganizer.auth.web;
 import com.julio.lifeorganizer.auth.service.AuthService;
 import com.julio.lifeorganizer.auth.web.dto.AccessTokenResponse;
 import com.julio.lifeorganizer.auth.web.dto.AuthTokensResponse;
+import com.julio.lifeorganizer.auth.web.dto.ConfirmAccountRestoreRequest;
+import com.julio.lifeorganizer.auth.web.dto.ConfirmEmailChangeRequest;
 import com.julio.lifeorganizer.auth.web.dto.ForgotPasswordRequest;
 import com.julio.lifeorganizer.auth.web.dto.LoginRequest;
 import com.julio.lifeorganizer.auth.web.dto.RefreshRequest;
@@ -76,5 +78,17 @@ public class AuthController {
         authService.resendVerification(request);
         return new ApiResponse<>(true, null,
                 "If that email is registered and unverified, a new link has been sent.", null);
+    }
+
+    @PostMapping("/confirm-email-change")
+    public ApiResponse<UserResponse> confirmEmailChange(
+            @Valid @RequestBody ConfirmEmailChangeRequest request) {
+        return ApiResponse.ok(authService.confirmEmailChange(request));
+    }
+
+    @PostMapping("/confirm-account-restore")
+    public ApiResponse<UserResponse> confirmAccountRestore(
+            @Valid @RequestBody ConfirmAccountRestoreRequest request) {
+        return ApiResponse.ok(authService.confirmAccountRestore(request));
     }
 }

@@ -175,9 +175,11 @@ Now also returns "deletionScheduledAt" (null when not scheduled).
 
 4.2 JwtAuthenticationFilter
     After parsing the access token and loading the user, reject the
-    request with 401 ACCOUNT_DELETION_PENDING if deletion_scheduled_at
+    request with 403 ACCOUNT_DELETION_PENDING if deletion_scheduled_at
     is set and in the future. This catches sessions that started before
-    deletion and the access token has not yet expired.
+    deletion and the access token has not yet expired. Same status as
+    login (the token is technically valid, but the account state forbids
+    access).
 
 4.3 UserResponse
     Add deletionScheduledAt (nullable). Used by the dashboard to render a
@@ -282,7 +284,7 @@ AC-9-10  POST /me/delete with the correct password sets
 AC-9-11  After /me/delete: any subsequent login returns 403
          ACCOUNT_DELETION_PENDING with the scheduled date in meta.
 AC-9-12  After /me/delete: any subsequent request with an existing
-         (un-expired) access token returns 401 ACCOUNT_DELETION_PENDING.
+         (un-expired) access token returns 403 ACCOUNT_DELETION_PENDING.
 AC-9-13  POST /me/restore (auth path) with deletion_scheduled_at set and
          in the future clears it and returns 200. Login works normally
          afterwards.

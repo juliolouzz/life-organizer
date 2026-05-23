@@ -90,6 +90,17 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage(), ex.errorCode()));
     }
 
+    @ExceptionHandler(AccountDeletionPendingException.class)
+    public ResponseEntity<ApiResponse<Object>> handleDeletionPending(
+            AccountDeletionPendingException ex, HttpServletRequest req) {
+        warn(req, "deletion-pending", ex.errorCode());
+        Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("code", ex.errorCode());
+        meta.put("deletionScheduledAt", ex.getDeletionScheduledAt());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiResponse<>(false, null, ex.getMessage(), meta));
+    }
+
     @ExceptionHandler(AuthException.class)
     public ResponseEntity<ApiResponse<Object>> handleAuth(AuthException ex, HttpServletRequest req) {
         warn(req, "auth", ex.errorCode());
