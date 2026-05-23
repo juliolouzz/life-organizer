@@ -11,6 +11,6 @@ export const anonymousGuard: CanActivateFn = () => {
   if (!auth.isAuthenticated()) {
     return true;
   }
-  router.navigate(['/transactions']);
+  router.navigate(['/dashboard']);
   return false;
 };

@@ -200,7 +200,7 @@ export class LoginPage {
     this.auth.login(this.form.getRawValue()).subscribe({
       next: () => {
         this.submitting.set(false);
-        this.router.navigate(['/transactions']);
+        this.router.navigate(['/dashboard']);
       },
       error: (err: unknown) => {
         this.submitting.set(false);

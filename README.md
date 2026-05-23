@@ -8,6 +8,7 @@ Personal finance + life management.
 
 - **Slice 1**: Spring Boot 3 REST API (Users + JWT auth + Transactions CRUD)
 - **Slice 2**: Angular 17 + Material 3 frontend consuming the API
+- **Slice 3**: Dashboard — balance, income vs expense charts, category donut, period comparisons
 
 > Behavioural contracts: [`docs/specs/slice-1-spec.txt`](docs/specs/slice-1-spec.txt) · [`docs/specs/slice-2-spec.txt`](docs/specs/slice-2-spec.txt)
 > Architectures: [`slice-1-architecture.md`](docs/specs/slice-1-architecture.md) · [`slice-2-architecture.md`](docs/specs/slice-2-architecture.md)
@@ -118,6 +119,8 @@ auth/           Role enum, UserEntity, UserRepository, JwtService, AuthService,
                 JwtAuthenticationFilter, AuthController, UserController, DTOs
 transactions/   TransactionType, CursorCodec, TransactionEntity, repository,
                 TransactionService, TransactionController, DTOs
+insights/       InsightsService, InsightsController (3 aggregation endpoints),
+                CategoryTotalRow / TypeSumRow / DailyBucketRow projections, DTOs
 ```
 
 ### Frontend (`frontend/src/app/`)
@@ -142,6 +145,8 @@ features/
   profile               ProfilePage
   transactions/list     TransactionsListPage (table, filters, pagination)
   transactions/form     TransactionFormPage (create + edit unified)
+  dashboard             DashboardPage + 3 widgets (stat-card, income-expense-chart,
+                        category-donut), PeriodSelector, InsightsService
   not-found             NotFoundPage
 ```
 
@@ -150,6 +155,8 @@ features/
 **Slice 1**: complete — 52 backend tests pass via `mvn verify`, JaCoCo ≥80% on service + web, ArchUnit clean, full flow validated against live Postgres ([run evidence](docs/run-evidence.md)).
 
 **Slice 2**: complete — Angular 17 frontend builds, lints, and unit-tests clean; Material 3 theme with dark mode; full register → login → transactions CRUD UI; Playwright E2E covers the happy path.
+
+**Slice 3**: complete — Dashboard at `/dashboard` (new default landing) with 4 stat cards (net, income, expenses, savings rate), Income-vs-Expense bar chart with auto granularity, category donut (top 8 + Other), recent transactions card, period selector (this month / last month / last 3 months / this year / all time / custom). Three new server-side aggregation endpoints under `/api/v1/insights`. 6 new backend integration tests + 6 new frontend unit tests.
 
 ### Backend ACs
 
