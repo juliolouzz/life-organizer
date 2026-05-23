@@ -48,6 +48,13 @@ app:
     dev-delivery:
       enabled: ${APP_AUTH_DEV_DELIVERY_ENABLED:false}
       file-path: ${APP_AUTH_DEV_DELIVERY_FILE:.tmp/auth-dev-links.txt}
+    # Off by default - single-operator self-host does not need the "verify your
+    # email" friction step. New users are auto-marked verified at register; no
+    # verification email is sent. Flip to true when sharing the app with others
+    # to restore the gate. Other email flows (password reset, change-email,
+    # account restore) are unaffected by this flag.
+    email-verification:
+      enabled: ${APP_AUTH_EMAIL_VERIFICATION_ENABLED:false}
 
 management:
   endpoints:

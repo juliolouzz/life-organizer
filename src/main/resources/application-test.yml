@@ -24,3 +24,10 @@ app:
   # since the limiter is a singleton across the test run.
   rate-limit:
     enabled: false
+  auth:
+    # Tests assert the full Slice 8 verification flow (register issues a
+    # verification token, verify-email flips emailVerified). Keep the feature
+    # ON in the test profile regardless of the production default; the
+    # disabled-flow test overrides this back to false via @TestPropertySource.
+    email-verification:
+      enabled: true
