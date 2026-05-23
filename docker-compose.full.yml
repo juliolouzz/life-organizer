@@ -31,20 +31,35 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: life-organizer/backend:0.4
+    image: life-organizer/backend:0.11
     container_name: lifeorg_backend
     restart: unless-stopped
+    user: "10001:10001"
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      # No SPRING_PROFILES_ACTIVE: the "local" profile hardcodes localhost which only works
-      # outside containers. application.yml resolves DB_URL from env vars below.
+      # No SPRING_PROFILES_ACTIVE here by default - the bundled compose is for
+      # local prod-like trials, not actual deployments. Set SPRING_PROFILES_ACTIVE=prod
+      # in your .env when you want SMTP + JSON logs + tighter pool settings.
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
       DB_URL: jdbc:postgresql://postgres:5432/life_organizer
       DB_USERNAME: life_organizer
       DB_PASSWORD: life_organizer
       # JWT_SECRET must be set in .env. Generate one with: openssl rand -base64 48
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env or your shell - it must be 32+ chars}
+      # Mail (only used when SPRING_PROFILES_ACTIVE=prod or app.mail.provider=smtp).
+      # Leave unset to fall through to the dev-delivery file (the default).
+      APP_MAIL_PROVIDER: ${APP_MAIL_PROVIDER:-file}
+      APP_MAIL_FROM_ADDRESS: ${APP_MAIL_FROM_ADDRESS:-}
+      APP_MAIL_FROM_NAME: ${APP_MAIL_FROM_NAME:-Life Organizer}
+      APP_MAIL_BASE_URL: ${APP_MAIL_BASE_URL:-http://localhost:4200}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-587}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: ${SPRING_MAIL_STARTTLS:-true}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: ${SPRING_MAIL_AUTH:-true}
     expose:
       - "8080"
     # 8080 is intentionally NOT published to the host - all traffic goes via nginx.
@@ -56,7 +71,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    image: life-organizer/frontend:0.4
+    image: life-organizer/frontend:0.11
     container_name: lifeorg_frontend
     restart: unless-stopped
     depends_on:
