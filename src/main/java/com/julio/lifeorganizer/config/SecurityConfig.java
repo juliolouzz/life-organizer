@@ -108,7 +108,7 @@ public class SecurityConfig {
             // hitting backend on :8080).
             CorsConfiguration cors = new CorsConfiguration();
             cors.setAllowedOrigins(allowedOrigins);
-            cors.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+            cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
             cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-Id"));
             cors.setExposedHeaders(List.of("X-Request-Id"));
             cors.setAllowCredentials(false);
