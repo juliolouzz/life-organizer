@@ -1,0 +1,328 @@
+================================================================================
+LIFE ORGANIZER - SLICE 2 SPECIFICATION
+================================================================================
+Project       : Life Organizer (personal learning project)
+Slice         : 2 - Angular 17 frontend for Slice 1 API
+Stack         : Angular 17 + signals · TypeScript strict · standalone components
+                Angular Material 17 + Material 3 (Material You) theming
+                Reactive Forms · Angular Router · Jest (or Karma+Jasmine)
+                Playwright for E2E
+Repo layout   : monorepo - frontend/ in /Users/juliolouzano/Software Development/
+                Life_Organizer/frontend/
+Depends on    : Slice 1 API (this repo, main branch)
+Approved by   : julio.cdl.vet@gmail.com
+Status        : APPROVED - ready for arch then plan then tdd
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1. DECISIONS LEDGER (LOCKED)
+--------------------------------------------------------------------------------
+
+#   Decision
+--- ----------------------------------------------------------------------------
+1   Repo location: monorepo, code under frontend/
+2   Angular: 17.x latest stable, standalone components, signals
+3   TypeScript: strict mode, noImplicitAny, strictNullChecks all on
+4   Component library: Angular Material 17 with Material 3 theming
+5   Layout / utility CSS: Sass + CSS custom properties, no Tailwind
+6   Form library: Reactive Forms (no template-driven)
+7   State: signals + computed, no NgRx, no signal store - service-level signals
+8   Routing: standalone APIs, lazy-loaded feature routes
+9   Token storage: refresh token in localStorage, access token in memory only
+10  Auth header: Bearer in Authorization, per backend contract
+11  Refresh flow: 401 interceptor auto-refreshes once, retries original request;
+    if refresh fails, clear tokens and route to /login
+12  Logout: client-only (clear tokens + route to /login) since backend has no
+    revocation endpoint (R2 accepted in Slice 1)
+13  Theming: custom Material 3 palette (seed colour TBD in arch), light + dark
+    modes, dark mode preference persisted in localStorage with system default
+14  Typography: Inter for UI text, JetBrains Mono for numerals (money + IDs)
+15  Icon set: Material Symbols (variable font), outlined style
+16  HTTP: HttpClient with functional interceptors (auth, refresh, error)
+17  Error display: MatSnackBar for transient, inline for form validation
+18  Pagination UX: "Load more" button (matches keyset cursor semantics)
+19  Date input: MatDatepicker, ISO yyyy-MM-dd on the wire
+20  Currency: BRL hard-coded (matches Slice 1 decision 12)
+21  Empty states: illustrated empty state with primary action
+22  Loading: top-of-page MatProgressBar during in-flight HTTP
+23  Accessibility target: WCAG 2.1 AA
+24  Test framework: Jest via @jest/globals (Angular 17 default is Karma+Jasmine;
+    we override to Jest for speed and ecosystem)
+25  E2E: Playwright (per CLAUDE.md preference for backend; consistent across stack)
+26  Coverage target: 70% on services and components (lower than backend's 80%
+    because Angular template tests have more setup overhead)
+27  Build artefact: static files; backend stays decoupled - no fat-jar bundling
+28  Dev-time CORS: backend allows http://localhost:4200 in local profile only;
+    prod served same-origin (frontend behind same domain as API)
+29  Browser support: latest 2 versions of Chrome, Firefox, Safari, Edge
+
+
+--------------------------------------------------------------------------------
+2. TECHNICAL ASSUMPTIONS
+--------------------------------------------------------------------------------
+
+* Backend base URL: http://localhost:8080/api/v1 (dev) - configurable via
+  environment.ts and environment.production.ts
+* API contract: every response is ApiResponse<T> { success, data, message, meta }
+* Auth: Bearer JWT in Authorization header; 15m access TTL, 7d refresh TTL
+* Date format: ISO yyyy-MM-dd on the wire, locale-formatted on screen
+* Money format: BigDecimal as string on the wire ("42.50"), locale-formatted on
+  screen with always-two-decimal-place rendering
+* No service worker / PWA in Slice 2 (could add in Slice 3)
+* No analytics, no third-party tracking
+* No SSR (CSR only) - simpler, no node runtime in prod
+
+
+--------------------------------------------------------------------------------
+3. FEATURE SUMMARY
+--------------------------------------------------------------------------------
+
+Slice 2 delivers a single-page Angular application that lets a user register,
+log in, view their transactions with pagination and date filtering, create new
+transactions, edit existing ones, soft-delete them, view their own profile, and
+log out. The visual language is Material 3 with a custom theme; the app supports
+light and dark mode; every page handles loading, empty, and error states.
+
+The frontend never talks to the database. Every interaction goes through the
+Slice 1 REST API at /api/v1. The frontend trusts no input from URL parameters
+or query strings beyond cursor / id values; ownership is enforced by the
+backend, the frontend just renders what it gets.
+
+
+--------------------------------------------------------------------------------
+4. ROUTES
+--------------------------------------------------------------------------------
+
+Path                              Guard                Lazy   Component
+/login                            anonymousOnly        yes    LoginPage
+/register                         anonymousOnly        yes    RegisterPage
+/                                 -                    -      redirect to /transactions
+/transactions                     authenticated        yes    TransactionsListPage
+/transactions/new                 authenticated        yes    TransactionFormPage (mode=create)
+/transactions/:id/edit            authenticated        yes    TransactionFormPage (mode=edit)
+/profile                          authenticated        yes    ProfilePage
+/**                               -                    -      NotFoundPage
+
+
+--------------------------------------------------------------------------------
+5. PAGE-BY-PAGE BEHAVIOUR
+--------------------------------------------------------------------------------
+
+5.1 LoginPage
+-------------
+Layout      : centred card, max-width 420px, brand logo + title above card
+Fields      : email (required, email format), password (required, type=password
+              with visibility toggle)
+Actions     : "Log in" primary button; "Don't have an account? Register" link
+Errors      : 401 INVALID_CREDENTIALS -> inline form-level error
+              "Invalid email or password" (matches backend; no enumeration);
+              network -> snackbar; other 4xx -> snackbar with message
+On success  : store tokens, fetch /me, navigate to /transactions
+
+5.2 RegisterPage
+----------------
+Layout      : centred card, max-width 420px
+Fields      : email, password (with strength indicator), displayName
+Validation  : matches backend rules exactly (email format, password >= 8 + letter +
+              digit, displayName 2-100)
+Server errs : per-field map from response.meta -> inline field errors
+On success  : auto-login (POST /auth/login), navigate to /transactions, show
+              welcome snackbar "Welcome, <displayName>"
+
+5.3 App Shell (authenticated routes)
+------------------------------------
+Layout      : permanent sidenav (collapsible to icon-rail on narrow), top app bar
+Sidenav     : Transactions, Profile, divider, Logout
+Top bar     : page title, theme toggle, user avatar (initials) menu
+
+5.4 TransactionsListPage
+------------------------
+Layout      : page title "Transactions", toolbar (filters + New button),
+              data table, pagination footer
+Columns     : Date | Type | Category | Description | Amount | actions
+Type cell   : badge - INCOME = green tint, EXPENSE = neutral
+Amount cell : right-aligned, monospace, two decimals, locale-formatted, sign
+              prefix "+" for INCOME, "-" for EXPENSE
+Filters     : date range (from / to) via two MatDatepickers; "Apply" / "Clear"
+Pagination  : "Load more" button at bottom; disabled when no nextCursor
+Empty state : when zero transactions for current filter, show illustration +
+              "No transactions yet" + primary "New transaction" button
+Row actions : kebab menu - Edit, Delete (with confirm dialog)
+Delete      : confirm dialog "Delete this transaction?" with Cancel / Delete;
+              on confirm calls DELETE, removes row optimistically, undo snackbar
+              for 5 seconds (calls POST again only if undo is pressed within TTL
+              - wait, backend has no undelete - so undo is NOT supported; just
+              show "Transaction deleted" snackbar without undo)
+
+5.5 TransactionFormPage (create + edit)
+---------------------------------------
+Layout      : single column form, max-width 560px
+Fields      : amount (number input, locale separator), type (segmented toggle
+              INCOME / EXPENSE), category (text), description (textarea),
+              transactionDate (MatDatepicker, defaults to today)
+Validation  : matches backend rules
+Edit mode   : pre-fills from GET /transactions/:id; "Save" button (PUT)
+Create mode : empty form (today as default date); "Create" button (POST)
+On success  : navigate back to /transactions; snackbar "Transaction created"
+              / "Transaction updated"
+Server errs : 404 in edit mode -> navigate to /transactions with snackbar
+              "Transaction not found"; 400 validation -> per-field map inline
+
+5.6 ProfilePage
+---------------
+Layout      : centred card with user info
+Display     : avatar (initials), displayName, email, role
+Actions     : "Log out" button at the bottom (calls logout flow)
+
+5.7 NotFoundPage
+----------------
+Layout      : centred message "Page not found", "Go home" button to /
+
+
+--------------------------------------------------------------------------------
+6. STATE MANAGEMENT
+--------------------------------------------------------------------------------
+
+AuthService (singleton, providedIn: 'root')
+  signals:
+    accessToken      : string | null
+    refreshToken     : string | null (mirrored to localStorage)
+    currentUser      : User | null
+  computed:
+    isAuthenticated  : boolean
+  methods:
+    login(credentials)
+    register(payload)
+    refresh()                  // returns Observable<void>
+    logout()
+    bootstrap()                // on app init: try to load refresh token from
+                               // localStorage and silent-refresh
+
+TransactionsService (singleton)
+  methods: list(query), getById(id), create(req), update(id, req), delete(id)
+  - no shared signal state for the list - each page that needs it owns its
+    signal so list state in one route doesn't bleed into another
+
+ThemeService
+  signal: mode ('light' | 'dark')
+  effect: applies a class to <html>, persists to localStorage
+
+
+--------------------------------------------------------------------------------
+7. HTTP INTERCEPTORS (functional, in order)
+--------------------------------------------------------------------------------
+
+1. authInterceptor       : attaches Authorization: Bearer <accessToken> to every
+                           /api/v1/** request EXCEPT /auth/login + /auth/register
+                           + /auth/refresh
+2. refreshInterceptor    : on 401, attempts refresh once (with mutex so parallel
+                           401s don't trigger N refreshes); on success retries
+                           original request; on failure clears tokens and
+                           navigates to /login
+3. errorInterceptor      : maps non-401 errors to snackbar messages; passes
+                           ApiResponse.meta.code through to the page if present
+4. loadingInterceptor    : increments / decrements a counter signal in
+                           LoadingService; the top-of-page MatProgressBar binds
+                           to "counter > 0"
+
+
+--------------------------------------------------------------------------------
+8. ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+
+Auth (AC-F-A)
+-------------
+AC-F-A1   Visiting / when unauthenticated redirects to /login.
+AC-F-A2   Visiting /login when authenticated redirects to /transactions.
+AC-F-A3   Login with valid credentials stores tokens, fetches /me, navigates to
+          /transactions.
+AC-F-A4   Login with wrong credentials shows inline form error
+          "Invalid email or password"; tokens are not stored.
+AC-F-A5   Login with wrong credentials does not call /me.
+AC-F-A6   Registration with valid input creates user, auto-logs-in, navigates to
+          /transactions.
+AC-F-A7   Registration with duplicate email shows inline email error
+          "Email already registered".
+AC-F-A8   Password strength indicator is visible on register; correct strength
+          is shown for short, medium, strong passwords.
+AC-F-A9   Logging out clears both tokens from memory and localStorage and
+          navigates to /login.
+AC-F-A10  Refresh token in localStorage survives a page reload; on boot,
+          the app silently refreshes and lands on the authenticated route.
+AC-F-A11  Expired access token triggers refresh interceptor; original request
+          is retried after refresh succeeds.
+AC-F-A12  Refresh failure (e.g., refresh expired) clears tokens and routes to
+          /login.
+
+Transactions (AC-F-T)
+---------------------
+AC-F-T1   /transactions shows a table with up to 20 rows initially.
+AC-F-T2   "Load more" fetches the next keyset page; results are appended.
+AC-F-T3   When the API returns nextCursor=null/empty, "Load more" is disabled.
+AC-F-T4   Empty list shows the empty state with a primary "New transaction"
+          button.
+AC-F-T5   Date range filter passes from + to query params to the API.
+AC-F-T6   Setting from > to disables the Apply button (client-side check).
+AC-F-T7   Amount cell is right-aligned, monospace, two decimals, locale-grouped,
+          sign-prefixed by type (+ INCOME, - EXPENSE).
+AC-F-T8   Type cell renders as a coloured badge (INCOME green, EXPENSE neutral).
+AC-F-T9   /transactions/new submits POST and navigates back to /transactions on
+          success.
+AC-F-T10  /transactions/:id/edit pre-fills the form from GET; PUT replaces all
+          five fields; updatedAt visibly changes after save.
+AC-F-T11  PUT with backend validation error places the per-field message under
+          the corresponding input.
+AC-F-T12  GET /transactions/:id 404 in edit mode navigates back to /transactions
+          and shows snackbar "Transaction not found".
+AC-F-T13  Delete row shows confirm dialog; cancel does nothing; confirm calls
+          DELETE and removes the row.
+AC-F-T14  Second DELETE on the same row (race) is handled gracefully; snackbar
+          "Transaction not found", row stays removed.
+
+Cross-cutting (AC-F-X)
+----------------------
+AC-F-X1   Every page renders correctly in light AND dark mode.
+AC-F-X2   Theme toggle in topbar switches modes; choice persists across reload.
+AC-F-X3   Top progress bar visible whenever any HTTP request is in flight.
+AC-F-X4   Network errors show "Cannot reach server" snackbar.
+AC-F-X5   No console.log / console.error in committed code.
+AC-F-X6   No 'any' type in committed code (strict mode + eslint enforced).
+AC-F-X7   All form components are reactive (FormGroup); no template-driven forms.
+AC-F-X8   All routes are lazy-loaded.
+AC-F-X9   Bundle size: initial JS under 500 KB gzipped.
+AC-F-X10  Lighthouse accessibility score >= 95 on each route.
+AC-F-X11  All interactive elements are keyboard-reachable; focus is visible.
+AC-F-X12  Playwright E2E covers full register -> login -> create -> list ->
+          edit -> delete -> logout flow against a live backend.
+
+
+--------------------------------------------------------------------------------
+9. OUT OF SCOPE (SLICE 2)
+--------------------------------------------------------------------------------
+
+Explicitly NOT included:
+
+* Dashboard / charts / aggregations
+* Recurring transactions, budgets, alerts
+* Reports, CSV export, PDF export
+* File upload (receipts)
+* Categories as their own entity (free-text only, per Slice 1 spec)
+* Account / wallet UI
+* Multi-currency display
+* PATCH endpoints (UI does full-replace PUT only)
+* Search by description / category (filter is date range only, per Slice 1)
+* Forgot password / password reset
+* Email verification UI
+* Profile edit (display only; no update endpoint exists)
+* Settings page beyond profile
+* PWA / service worker / offline
+* Server-side rendering
+* i18n / multiple languages
+* Mobile-app shell beyond responsive design
+* Health / diary / reminders verticals - future slices
+
+
+--------------------------------------------------------------------------------
+END OF SPEC - Slice 2
+================================================================================
