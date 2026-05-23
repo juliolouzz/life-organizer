@@ -28,6 +28,11 @@ app:
       # Disabled in prod regardless of any inherited default. Tokens never
       # touch the filesystem when SMTP is the delivery channel.
       enabled: false
+    # Prod implies "shared with other users" - turn the verify-your-email
+    # gate back on by default. Override with APP_AUTH_EMAIL_VERIFICATION_ENABLED=false
+    # if you self-host prod for yourself only.
+    email-verification:
+      enabled: ${APP_AUTH_EMAIL_VERIFICATION_ENABLED:true}
 
 # JSON log output. logback-spring.xml switches the appender when this profile is active.
 logging:

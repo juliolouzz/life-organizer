@@ -23,6 +23,7 @@ import com.julio.lifeorganizer.common.exception.InvalidTokenException;
 import com.julio.lifeorganizer.common.exception.UserNotFoundForTokenException;
 import java.time.Clock;
 import java.time.Instant;
+import com.julio.lifeorganizer.config.EmailVerificationProperties;
 import com.julio.lifeorganizer.config.JwtProperties;
 import com.julio.lifeorganizer.mail.MailService;
 import io.jsonwebtoken.Claims;
@@ -57,6 +58,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
     private final MailService mailService;
+    private final EmailVerificationProperties emailVerificationProps;
     private final Clock clock;
 
     public AuthService(UserRepository userRepository,
@@ -64,12 +66,14 @@ public class AuthService {
                        JwtService jwtService,
                        JwtProperties jwtProperties,
                        MailService mailService,
+                       EmailVerificationProperties emailVerificationProps,
                        Clock clock) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.jwtProperties = jwtProperties;
         this.mailService = mailService;
+        this.emailVerificationProps = emailVerificationProps;
         this.clock = clock;
     }
 
@@ -86,11 +90,22 @@ public class AuthService {
                 Role.ROLE_USER,
                 Currency.parseOrDefault(request.currency())
         );
+        // Personal-use default (app.auth.email-verification.enabled=false): mark
+        // the user as verified immediately and skip the verification email. Flip
+        // the flag to true when sharing the app to restore the original gate.
+        if (!emailVerificationProps.isEnabled()) {
+            user.markEmailVerified();
+        }
         UserEntity saved = userRepository.save(user);
-        String verifyToken = jwtService.generateEmailVerificationToken(saved.getId());
-        log.info("verification email issued for user {} ({})", saved.getId(), saved.getEmail());
-        mailService.sendEmailVerification(saved.getEmail(), saved.getDisplayName(),
-                "/verify-email?token=" + verifyToken);
+        if (emailVerificationProps.isEnabled()) {
+            String verifyToken = jwtService.generateEmailVerificationToken(saved.getId());
+            log.info("verification email issued for user {} ({})", saved.getId(), saved.getEmail());
+            mailService.sendEmailVerification(saved.getEmail(), saved.getDisplayName(),
+                    "/verify-email?token=" + verifyToken);
+        } else {
+            log.info("registered user {} ({}) auto-verified (email verification disabled)",
+                    saved.getId(), saved.getEmail());
+        }
         return UserResponse.from(saved);
     }
 
@@ -156,8 +171,18 @@ public class AuthService {
      * Re-sends the verification email. Same anti-enumeration pattern: always
      * returns successfully regardless of whether the email is registered or already verified.
      * Performs equivalent work in the no-op branch to flatten timing.
+     *
+     * <p>When email verification is disabled (the personal-use default), this
+     * is a no-op: every user is already auto-verified at register time, so
+     * there is nothing to resend. The 200 response is still returned to the
+     * caller for anti-enumeration consistency.
      */
     public void resendVerification(ForgotPasswordRequest request) {
+        if (!emailVerificationProps.isEnabled()) {
+            // Burn equivalent CPU so response time stays flat across the flag.
+            jwtService.generateEmailVerificationToken(0L);
+            return;
+        }
         String email = request.email().trim().toLowerCase();
         userRepository.findByEmail(email)
                 .filter(user -> !user.isEmailVerified())
