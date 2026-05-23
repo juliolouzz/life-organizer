@@ -8,6 +8,7 @@ import com.julio.lifeorganizer.insights.service.InsightsService.ByPeriodResult;
 import com.julio.lifeorganizer.insights.service.InsightsService.Granularity;
 import com.julio.lifeorganizer.insights.web.dto.CategoryTotal;
 import com.julio.lifeorganizer.insights.web.dto.SummaryResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.util.List;
@@ -23,6 +24,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/insights")
 @Validated
+@Tag(name = "Insights",
+        description = "Dashboard aggregations (Slice 3): summary totals, by-period buckets, "
+                + "top categories. Inputs are arbitrary from/to dates; output is amounts in "
+                + "BRL units with scale 2.")
 public class InsightsController {
 
     private final InsightsService service;

@@ -11,6 +11,7 @@ import com.julio.lifeorganizer.auth.web.dto.UpdateProfileRequest;
 import com.julio.lifeorganizer.auth.web.dto.UserResponse;
 import com.julio.lifeorganizer.common.api.ApiResponse;
 import com.julio.lifeorganizer.common.exception.UnauthorizedException;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.Map;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -27,6 +28,10 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/me")
+@Tag(name = "Account",
+        description = "Self-service writes on the authenticated user's own account: "
+                + "display name, password, email change, soft delete + restore, and the "
+                + "Slice 12 'sign out of all sessions' endpoint.")
 public class AccountController {
 
     private final AccountService accountService;

@@ -17,10 +17,13 @@ Personal finance + life management.
 - **Slice 9**: **Account management** — change display name / password / email (typo-safe two-step) and account deletion with a 30-day grace period (soft delete + daily scheduled hard-delete job); deletion gate on login and `JwtAuthenticationFilter`; authenticated and anonymous restore paths
 - **Slice 10**: **Reports & insights** — dedicated `/reports` page with monthly summary, year-over-year comparison, category trends; CSV export (round-trip-safe with Slice 7 import) and PDF export (server-side via OpenHTMLtoPDF + Thymeleaf)
 - **Slice 11**: **Operational hardening** — pluggable `MailService` abstraction (file or SMTP) with HTML+text email for all 4 magic-link flows, `prod` Spring profile with structured JSON logs, non-root alpine Docker image with tini as PID 1, `.env.prod.example` + [deployment guide](docs/deployment.md)
+- **Slice 12**: **Refresh-token revocation** — per-user `token_version` epoch with a `tv` claim on every JWT; `POST /me/sessions/logout-all` bumps the epoch (password-confirmed, rate-limited); password change AND password reset auto-bump so a leaked refresh token cannot outlive credential rotation
+- **Tooling**: **OpenAPI / Swagger UI** at `/swagger-ui/index.html` with a Bearer "Authorize" button so operators can try every endpoint from the browser; raw spec at `/v3/api-docs`
 
+> [`TUTORIAL.md`](TUTORIAL.md) - end-to-end build-it-yourself guide for someone learning to code · [`PROJECT.md`](PROJECT.md) - as-built reference (architecture, decisions, risk register)
 > Behavioural contracts: [`docs/specs/`](docs/specs/) (one `slice-N-spec.txt` per slice)
-> Architectures: `slice-N-architecture.md` (Slices 1-3, 8-11) under [`docs/specs/`](docs/specs/)
-> Project rules: [`CLAUDE.md`](CLAUDE.md) · Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+> Architectures: `slice-N-architecture.md` (Slices 1-3, 8-12) under [`docs/specs/`](docs/specs/)
+> Project rules: [`CLAUDE.md`](CLAUDE.md) · Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md) · Deployment: [`docs/deployment.md`](docs/deployment.md)
 
 ## Stack
 
@@ -224,7 +227,7 @@ features/
 
 ## Status
 
-All 11 slices complete and merged through PRs with green CI + branch protection enforced.
+All 12 slices complete and merged through PRs with green CI + branch protection enforced.
 
 - **Slice 1**: REST API + JWT auth + transactions CRUD ([run evidence](docs/run-evidence.md))
 - **Slice 2**: Angular 17 + Material 3 frontend
@@ -237,8 +240,10 @@ All 11 slices complete and merged through PRs with green CI + branch protection 
 - **Slice 9**: Account management (display name, password, email, delete with 30-day grace)
 - **Slice 10**: Reports & insights (/reports page + CSV/PDF export)
 - **Slice 11**: Operational hardening (SMTP, prod profile, JSON logs, non-root Docker)
+- **Slice 12**: Refresh-token revocation (per-user epoch, sign out everywhere)
+- **Tooling**: OpenAPI / Swagger UI
 
-**Numbers**: 86 backend tests + 17 frontend unit tests, JaCoCo ≥80% on service + web packages, ArchUnit layering rules enforced, CodeQL clean (CSRF false positive documented + suppressed), branch protection on `main` requires CI green + no force-pushes.
+**Numbers**: 92 backend tests + 17 frontend unit tests, JaCoCo ≥80% on service + web packages, ArchUnit layering rules enforced, CodeQL clean (CSRF false positive documented + suppressed), branch protection on `main` requires CI green + no force-pushes.
 
 ### Backend ACs
 
@@ -272,15 +277,26 @@ All 11 slices complete and merged through PRs with green CI + branch protection 
 | `v0.9.0` | Account management (display name, password, email, delete with grace) |
 | `v0.10.0` | Reports & insights (Summary, YoY, Trends + CSV/PDF export) |
 | `v0.11.0` | Operational hardening (SMTP, prod profile, JSON logs, non-root Docker) |
+| `v0.12.0` | Refresh-token revocation (per-user epoch, sign out everywhere) |
 
 ## What's next
 
-- **Refresh-token revocation** — `token_version` column so logout-everywhere actually works; any leaked refresh token can be killed
 - **Observability** — Micrometer / Prometheus, OpenTelemetry tracing, /actuator/metrics exposure
 - **Persistent outbox** — retry SMTP delivery on transient failures; pair with a small jobs framework
+- **Per-device session list** — show "you have N active sessions" with granular revocation; refresh-token rotation
 - **Other verticals** — health / fitness, diary, reminders, goals
 
-See [`docs/specs/`](docs/specs/) for behavioural contracts and ADRs and [`docs/deployment.md`](docs/deployment.md) for the production deployment guide.
+See [`docs/specs/`](docs/specs/) for behavioural contracts and ADRs, [`PROJECT.md`](PROJECT.md) for the as-built architecture reference, [`TUTORIAL.md`](TUTORIAL.md) for the build-it-yourself guide, and [`docs/deployment.md`](docs/deployment.md) for the production deployment guide.
+
+## API documentation
+
+While the app is running locally:
+
+- Swagger UI: <http://localhost:8080/swagger-ui/index.html>
+- Raw OpenAPI spec: <http://localhost:8080/v3/api-docs>
+
+The Swagger UI has an **Authorize** button - paste an access token from
+`POST /auth/login` to try the secured endpoints from the browser.
 
 ## Development workflow
 

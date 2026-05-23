@@ -7,6 +7,7 @@ import com.julio.lifeorganizer.reports.service.ReportsService;
 import com.julio.lifeorganizer.reports.web.dto.CategoryTrendsReport;
 import com.julio.lifeorganizer.reports.web.dto.SummaryReport;
 import com.julio.lifeorganizer.reports.web.dto.YearOverYearReport;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -24,6 +25,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/reports")
 @Validated
+@Tag(name = "Reports",
+        description = "Slice 10 analytical views: monthly summary, year-over-year, and "
+                + "category trends. Read-only aggregations over the existing transactions "
+                + "table; no schema changes.")
 public class ReportsController {
 
     private final ReportsService reportsService;

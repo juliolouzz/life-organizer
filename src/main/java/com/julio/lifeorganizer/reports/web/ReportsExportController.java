@@ -3,6 +3,7 @@ package com.julio.lifeorganizer.reports.web;
 import com.julio.lifeorganizer.auth.security.AuthenticatedUser;
 import com.julio.lifeorganizer.common.exception.UnauthorizedException;
 import com.julio.lifeorganizer.reports.service.ReportsExportService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.time.LocalDate;
@@ -25,6 +26,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/reports")
 @Validated
+@Tag(name = "Reports Export",
+        description = "Downloadable formats for the Slice 10 reports: summary CSV "
+                + "(text/csv), summary PDF (application/pdf via Thymeleaf + OpenHTMLtoPDF), "
+                + "and the transactions CSV in the Slice 7 import format for round-trip "
+                + "safety.")
 public class ReportsExportController {
 
     public static final MediaType CSV = MediaType.parseMediaType("text/csv; charset=utf-8");

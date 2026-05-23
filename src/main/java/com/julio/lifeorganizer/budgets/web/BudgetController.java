@@ -7,6 +7,7 @@ import com.julio.lifeorganizer.budgets.web.dto.BudgetResponse;
 import com.julio.lifeorganizer.budgets.web.dto.BudgetStatusItem;
 import com.julio.lifeorganizer.common.api.ApiResponse;
 import com.julio.lifeorganizer.common.exception.UnauthorizedException;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/budgets")
+@Tag(name = "Budgets",
+        description = "Monthly budgets per category (Slice 6). Includes a /status endpoint "
+                + "with the running spend vs budget for each category in a given month.")
 public class BudgetController {
 
     private final BudgetService service;

@@ -143,6 +143,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- OpenAPI / Swagger UI - serves /v3/api-docs and /swagger-ui/index.html -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.6.0</version>
+        </dependency>
+
         <!-- JWT signing/parsing -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
