@@ -1,8 +1,13 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/life_organizer
-    username: life_organizer
-    password: life_organizer
+    # Use env vars when set (Docker / CI), fall back to localhost for the
+    # native "JDK + IntelliJ + frontend ng serve" workflow. The previous
+    # version hardcoded localhost which broke the local profile when set
+    # inside the Docker stack (localhost there is the backend container,
+    # not postgres).
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/life_organizer}
+    username: ${DB_USERNAME:life_organizer}
+    password: ${DB_PASSWORD:life_organizer}
   jpa:
     properties:
       hibernate:
@@ -10,14 +15,14 @@ spring:
 
 app:
   cors:
-    allowed-origins: http://localhost:4200
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:4200}
   auth:
     # Local dev only: append reset / verify links to a file so the operator can
     # follow them while no SMTP is wired up. NEVER enable this in profiles that
     # ship to a real deployment - the file would hold credentials.
     dev-delivery:
-      enabled: true
-      file-path: .tmp/auth-dev-links.txt
+      enabled: ${APP_AUTH_DEV_DELIVERY_ENABLED:true}
+      file-path: ${APP_AUTH_DEV_DELIVERY_FILE:.tmp/auth-dev-links.txt}
 
 logging:
   level:
