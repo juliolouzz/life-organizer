@@ -8,6 +8,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
 
@@ -28,6 +29,7 @@ import { LogoutAllDialogComponent, LogoutAllDialogResult } from './logout-all-di
     MatChipsModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     MatIconModule,
     MatDialogModule,
     PageHeaderComponent
@@ -72,6 +74,15 @@ import { LogoutAllDialogComponent, LogoutAllDialogResult } from './logout-all-di
             @if (profileForm.controls.displayName.hasError('minlength')) {
               <mat-error>Must be at least 2 characters.</mat-error>
             }
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Currency</mat-label>
+            <mat-select formControlName="currency" data-testid="profile-currency">
+              <mat-option value="BRL">Brazilian Real (R$)</mat-option>
+              <mat-option value="USD">US Dollar ($)</mat-option>
+              <mat-option value="EUR">Euro (€)</mat-option>
+            </mat-select>
+            <mat-hint>Display only - existing transactions keep their stored amount.</mat-hint>
           </mat-form-field>
           <button
             mat-flat-button
@@ -259,7 +270,8 @@ export class ProfilePage implements OnInit {
   protected readonly loggingOutAll = signal(false);
 
   protected readonly profileForm = this.fb.nonNullable.group({
-    displayName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]]
+    displayName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
+    currency: ['BRL' as 'BRL' | 'USD' | 'EUR', [Validators.required]]
   });
 
   protected readonly passwordForm = this.fb.nonNullable.group({
@@ -296,11 +308,12 @@ export class ProfilePage implements OnInit {
   protected saveProfile(): void {
     if (this.profileForm.invalid || this.profileSubmitting()) return;
     this.profileSubmitting.set(true);
-    this.accountService.updateProfile({ displayName: this.profileForm.controls.displayName.value.trim() })
+    const { displayName, currency } = this.profileForm.getRawValue();
+    this.accountService.updateProfile({ displayName: displayName.trim(), currency })
       .subscribe({
         next: () => {
           this.profileSubmitting.set(false);
-          this.snackBar.open('Display name updated.', 'Dismiss', { duration: 3000 });
+          this.snackBar.open('Profile updated.', 'Dismiss', { duration: 3000 });
         },
         error: () => {
           this.profileSubmitting.set(false);
@@ -418,6 +431,7 @@ export class ProfilePage implements OnInit {
     const u = this.user();
     if (u) {
       this.profileForm.controls.displayName.setValue(u.displayName);
+      this.profileForm.controls.currency.setValue(u.currency ?? 'BRL');
     }
   }
 

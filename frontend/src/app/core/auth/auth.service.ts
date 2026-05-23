@@ -17,6 +17,8 @@ export interface RegisterPayload {
   email: string;
   password: string;
   displayName: string;
+  /** Slice 13: BRL (default) / USD / EUR. */
+  currency?: 'BRL' | 'USD' | 'EUR';
 }
 
 export interface AuthTokens {

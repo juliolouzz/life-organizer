@@ -144,4 +144,39 @@ class AuthFlowIntegrationTest extends AbstractIntegrationTest {
         JsonNode meta = json.readTree(r.getBody()).get("meta");
         assertThat(meta.has("password")).isTrue();
     }
+
+    @Test
+    void register_withCurrency_persistsAndReturnsIt() throws Exception {
+        Map<String, String> body = Map.of(
+                "email", "usr" + System.nanoTime() + "@example.com",
+                "password", "S3cretValue",
+                "displayName", "USDUser",
+                "currency", "USD");
+        ResponseEntity<String> r = http.postForEntity("/api/v1/auth/register", body, String.class);
+        assertThat(r.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(json.readTree(r.getBody()).get("data").get("currency").asText()).isEqualTo("USD");
+    }
+
+    @Test
+    void register_withoutCurrency_defaultsToBRL() throws Exception {
+        Map<String, String> body = Map.of(
+                "email", "usr" + System.nanoTime() + "@example.com",
+                "password", "S3cretValue",
+                "displayName", "Default");
+        ResponseEntity<String> r = http.postForEntity("/api/v1/auth/register", body, String.class);
+        assertThat(r.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(json.readTree(r.getBody()).get("data").get("currency").asText()).isEqualTo("BRL");
+    }
+
+    @Test
+    void register_withInvalidCurrency_returns400() throws Exception {
+        Map<String, String> body = Map.of(
+                "email", "usr" + System.nanoTime() + "@example.com",
+                "password", "S3cretValue",
+                "displayName", "Bad",
+                "currency", "GBP");
+        ResponseEntity<String> r = http.postForEntity("/api/v1/auth/register", body, String.class);
+        assertThat(r.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(json.readTree(r.getBody()).get("meta").has("currency")).isTrue();
+    }
 }

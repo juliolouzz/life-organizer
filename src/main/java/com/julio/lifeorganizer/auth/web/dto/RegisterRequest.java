@@ -20,6 +20,13 @@ public record RegisterRequest(
 
         @NotBlank(message = "must not be blank")
         @Size(min = 2, max = 100, message = "must be between 2 and 100 characters")
-        String displayName
+        String displayName,
+
+        /**
+         * Slice 13: optional. Accepted values: BRL, USD, EUR. Omitting the
+         * field (or any unknown value) defaults the user to BRL.
+         */
+        @Pattern(regexp = "BRL|USD|EUR", message = "must be one of BRL, USD, EUR")
+        String currency
 ) {
 }

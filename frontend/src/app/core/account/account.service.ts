@@ -10,6 +10,8 @@ import { AuthenticatedUser } from '../auth/authenticated-user';
 
 export interface UpdateProfilePayload {
   displayName: string;
+  /** Slice 13: BRL / USD / EUR. */
+  currency?: 'BRL' | 'USD' | 'EUR';
 }
 
 export interface ChangePasswordPayload {

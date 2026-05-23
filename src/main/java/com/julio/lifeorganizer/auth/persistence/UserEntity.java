@@ -1,5 +1,6 @@
 package com.julio.lifeorganizer.auth.persistence;
 
+import com.julio.lifeorganizer.auth.domain.Currency;
 import com.julio.lifeorganizer.auth.domain.Role;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -37,6 +38,13 @@ public class UserEntity {
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified;
 
+    // Slice 13: display-only preference for amount formatting. Default BRL
+    // matches the historical behaviour; existing rows are backfilled by the
+    // V10 migration's column default.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "currency", nullable = false, length = 3)
+    private Currency currency = Currency.BRL;
+
     // Slice 12: revocation epoch. Every issued JWT carries this value as the
     // "tv" claim; a bump invalidates every prior token for this user.
     @Column(name = "token_version", nullable = false)
@@ -60,15 +68,23 @@ public class UserEntity {
     protected UserEntity() {
     }
 
-    private UserEntity(String email, String passwordHash, String displayName, Role role) {
+    private UserEntity(String email, String passwordHash, String displayName, Role role,
+                       Currency currency) {
         this.email = email;
         this.passwordHash = passwordHash;
         this.displayName = displayName;
         this.role = role;
+        this.currency = currency == null ? Currency.BRL : currency;
     }
 
-    public static UserEntity createNew(String email, String passwordHash, String displayName, Role role) {
-        return new UserEntity(email, passwordHash, displayName, role);
+    public static UserEntity createNew(String email, String passwordHash, String displayName,
+                                       Role role) {
+        return new UserEntity(email, passwordHash, displayName, role, Currency.BRL);
+    }
+
+    public static UserEntity createNew(String email, String passwordHash, String displayName,
+                                       Role role, Currency currency) {
+        return new UserEntity(email, passwordHash, displayName, role, currency);
     }
 
     public Long getId() {
@@ -109,6 +125,16 @@ public class UserEntity {
 
     public void changeDisplayName(String newDisplayName) {
         this.displayName = newDisplayName;
+    }
+
+    public Currency getCurrency() {
+        return currency;
+    }
+
+    public void changeCurrency(Currency newCurrency) {
+        if (newCurrency != null) {
+            this.currency = newCurrency;
+        }
     }
 
     public Instant getDeletionScheduledAt() {

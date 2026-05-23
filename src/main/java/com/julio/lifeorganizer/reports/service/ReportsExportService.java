@@ -1,5 +1,6 @@
 package com.julio.lifeorganizer.reports.service;
 
+import com.julio.lifeorganizer.auth.domain.Currency;
 import com.julio.lifeorganizer.auth.persistence.UserEntity;
 import com.julio.lifeorganizer.auth.persistence.UserRepository;
 import com.julio.lifeorganizer.reports.web.dto.CategoryAmount;
@@ -54,6 +55,11 @@ public class ReportsExportService {
     /** Resolves the display name used in PDF headers, falling back to the email. */
     public String displayNameFor(long userId, String emailFallback) {
         return users.findById(userId).map(UserEntity::getDisplayName).orElse(emailFallback);
+    }
+
+    /** Resolves the user's preferred currency (Slice 13). Falls back to BRL. */
+    public Currency currencyFor(long userId) {
+        return users.findById(userId).map(UserEntity::getCurrency).orElse(Currency.BRL);
     }
 
     public byte[] summaryCsv(long userId, int year, int month) {
@@ -116,7 +122,8 @@ public class ReportsExportService {
 
     public byte[] summaryPdf(long userId, int year, int month, String displayName) {
         SummaryReport report = reports.monthlySummary(userId, year, month);
-        String html = renderHtml(report, displayName);
+        Currency currency = currencyFor(userId);
+        String html = renderHtml(report, displayName, currency);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
             PdfRendererBuilder builder = new PdfRendererBuilder();
@@ -130,7 +137,7 @@ public class ReportsExportService {
         return out.toByteArray();
     }
 
-    private String renderHtml(SummaryReport report, String displayName) {
+    private String renderHtml(SummaryReport report, String displayName, Currency currency) {
         Context ctx = new Context(Locale.ROOT);
         Map<String, Object> model = new HashMap<>();
         model.put("displayName", displayName);
@@ -138,10 +145,10 @@ public class ReportsExportService {
         model.put("monthLabel", monthLabel(report.month()));
 
         Map<String, String> totals = new HashMap<>();
-        totals.put("income", brl(report.totals().income()));
-        totals.put("expense", brl(report.totals().expense()));
-        totals.put("savings", brl(report.totals().savings()));
-        totals.put("net", brl(report.totals().net()));
+        totals.put("income", format(report.totals().income(), currency));
+        totals.put("expense", format(report.totals().expense(), currency));
+        totals.put("savings", format(report.totals().savings(), currency));
+        totals.put("net", format(report.totals().net(), currency));
         totals.put("count", String.valueOf(report.totals().transactionCount()));
         model.put("totals", totals);
 
@@ -149,15 +156,25 @@ public class ReportsExportService {
                 .map(c -> Map.of(
                         "name", c.name(),
                         "type", c.type().name(),
-                        "amount", brl(c.amount())))
+                        "amount", format(c.amount(), currency)))
                 .toList());
         model.put("dailyBars", buildDailyBars(report.daily()));
         ctx.setVariables(model);
         return templateEngine.process("reports/summary", ctx);
     }
 
-    private static String brl(BigDecimal v) {
-        return "R$ " + String.format(Locale.US, "%,.2f", v == null ? BigDecimal.ZERO : v);
+    /**
+     * Slice 13 currency-aware formatting. Uses the same number layout
+     * everywhere ("%,.2f") for predictable PDF rendering; only the
+     * leading symbol changes.
+     */
+    private static String format(BigDecimal v, Currency currency) {
+        String symbol = switch (currency) {
+            case BRL -> "R$ ";
+            case USD -> "$ ";
+            case EUR -> "EUR ";
+        };
+        return symbol + String.format(Locale.US, "%,.2f", v == null ? BigDecimal.ZERO : v);
     }
 
     private static String monthLabel(int month) {

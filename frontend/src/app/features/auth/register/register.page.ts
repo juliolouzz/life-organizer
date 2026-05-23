@@ -6,6 +6,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -22,6 +23,7 @@ import { AuthService } from '../../../core/auth/auth.service';
     MatCardModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     MatButtonModule,
     MatIconModule
   ],
@@ -118,6 +120,16 @@ import { AuthService } from '../../../core/auth/auth.service';
             </div>
           }
 
+          <mat-form-field appearance="outline">
+            <mat-label>Currency</mat-label>
+            <mat-select formControlName="currency" data-testid="register-currency">
+              <mat-option value="BRL">Brazilian Real (R$)</mat-option>
+              <mat-option value="USD">US Dollar ($)</mat-option>
+              <mat-option value="EUR">Euro (€)</mat-option>
+            </mat-select>
+            <mat-hint>You can change this anytime from your account page.</mat-hint>
+          </mat-form-field>
+
           <button
             mat-flat-button
             color="primary"
@@ -208,7 +220,8 @@ export class RegisterPage {
         Validators.pattern(/^(?=.*[A-Za-z])(?=.*\d).*$/)
       ]
     ],
-    displayName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]]
+    displayName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
+    currency: ['BRL' as 'BRL' | 'USD' | 'EUR', [Validators.required]]
   });
 
   // Watch the password control as a signal so the strength meter is reactive.
