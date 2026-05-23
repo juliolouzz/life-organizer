@@ -1,0 +1,186 @@
+================================================================================
+LIFE ORGANIZER - SLICE 11 SPECIFICATION
+================================================================================
+Project       : Life Organizer
+Slice         : 11 - Operational hardening (SMTP, prod profile, JSON logs, Docker)
+Status        : APPROVED - building this slice
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1. WHY
+--------------------------------------------------------------------------------
+
+By the end of Slice 10 the app had FOUR features producing magic links the
+user needs to click - email verification, password reset, email change, and
+account restore. None of them are actually delivered. The .tmp/auth-dev-links.txt
+file is the only delivery channel and an operator has to tail it from the host
+filesystem. That is fine for a single-user self-host; it is fundamentally
+incompatible with sharing the app with anyone else.
+
+Beyond email, the deployment story is also half-done: a single application.yml,
+a root-running Docker container, ad-hoc human-readable logs, and no documented
+prod path. Slice 11 closes all of these gaps so the app can be deployed to a
+real host and shared with real humans.
+
+
+--------------------------------------------------------------------------------
+2. DECISIONS LEDGER (LOCKED)
+--------------------------------------------------------------------------------
+
+#   Decision
+--- ----------------------------------------------------------------------------
+1   Introduce a MailService abstraction with TWO implementations selected at
+    boot via app.mail.provider:
+        - file (default)  -> FileMailService, the existing dev-delivery sink
+        - smtp            -> SmtpMailService, wired through spring-boot-
+                             starter-mail's JavaMailSender. Works with any
+                             SMTP-compliant server (Gmail SMTP, SendGrid,
+                             Mailgun, Mailtrap, SES, etc.). No vendor lock-in.
+
+2   The MailService interface has four named methods, one per link type:
+        sendPasswordReset(toEmail, displayName, link)
+        sendEmailVerification(toEmail, displayName, link)
+        sendEmailChangeConfirmation(toEmail, displayName, link)
+        sendAccountRestore(toEmail, displayName, link)
+    AuthService and AccountService no longer call AuthDevDeliveryProperties
+    directly. They call the MailService. The link is opaque to them.
+
+3   SMTP message bodies are HTML, rendered from Thymeleaf templates under
+    src/main/resources/templates/mail/. One template per link type. Each
+    template renders to inline HTML with a fallback text part (Spring
+    MimeMessageHelper builds both).
+
+4   The "from" address is set by app.mail.from-address (required when
+    provider=smtp). The display name is app.mail.from-name (default
+    "Life Organizer"). The Reply-To is the same.
+
+5   When mail fails (provider=smtp, network down, SMTP rejects), the user-
+    facing endpoint STILL returns 200 / the same anti-enumeration response.
+    A WARN is logged with the message id and the SMTP error code. We do
+    not surface delivery failures to the caller (consistent with Slice 8's
+    anti-enumeration stance).
+
+6   New "prod" Spring profile in application-prod.yml:
+        - app.mail.provider = smtp
+        - app.auth.dev-delivery.enabled = false (defense in depth)
+        - Hikari maximum-pool-size: 20, minimum-idle: 5
+        - logging: JSON via logstash-logback-encoder
+        - spring.main.banner-mode = off
+        - server.error.include-message = never
+                                  server.error.include-stacktrace = never
+                                  server.error.include-exception = false
+    The default profile (no profile active) stays development-friendly.
+
+7   Structured JSON logs only when the prod profile is active. logstash-
+    logback-encoder is a runtime dependency; the activation is via a
+    logback-spring.xml that switches the appender based on profile.
+
+8   Dockerfile is multi-stage:
+        Stage 1 (build): eclipse-temurin:21-jdk-alpine + Maven for `mvn package`
+        Stage 2 (runtime): eclipse-temurin:21-jre-alpine
+        - dedicated non-root user `lifeorg` (uid 10001)
+        - HEALTHCHECK against /actuator/health
+        - JVM tuned for containers (-XX:MaxRAMPercentage=75 by default)
+        - tini as PID 1 for proper signal handling
+    The same Dockerfile builds locally and in CI.
+
+9   docker-compose.full.yml is updated to mount the new image as non-root.
+    The frontend nginx container stays as-is for now (frontend hardening
+    is a separate slice if needed).
+
+10  .env.prod.example documents every production env var:
+        DB_URL, DB_USERNAME, DB_PASSWORD
+        JWT_SECRET (>=32 chars)
+        SPRING_PROFILES_ACTIVE=prod
+        APP_CORS_ALLOWED_ORIGINS
+        APP_MAIL_PROVIDER=smtp
+        APP_MAIL_FROM_ADDRESS, APP_MAIL_FROM_NAME
+        SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME,
+            SPRING_MAIL_PASSWORD, SPRING_MAIL_PROPERTIES_*
+        APP_AUTH_DEV_DELIVERY_ENABLED=false (explicit; the default)
+
+11  docs/deployment.md walks through:
+        - Local prod-like test with docker compose
+        - Fly.io deployment (fly.toml example, secret commands)
+        - Generic VPS / DigitalOcean App Platform notes
+        - The mail provider quick-start for Gmail SMTP + Mailtrap dev
+
+
+--------------------------------------------------------------------------------
+3. NEW + CHANGED CODE
+--------------------------------------------------------------------------------
+
+3.1 New
+    src/main/java/com/julio/lifeorganizer/mail/
+        MailService.java                 (interface, 4 methods)
+        FileMailService.java             (@ConditionalOnProperty file)
+        SmtpMailService.java             (@ConditionalOnProperty smtp)
+        MailProperties.java              (@ConfigurationProperties app.mail)
+    src/main/resources/templates/mail/
+        password-reset.html
+        verify-email.html
+        change-email.html
+        account-restore.html
+    src/main/resources/logback-spring.xml      (profile-aware appender wiring)
+    src/main/resources/application-prod.yml
+    .env.prod.example
+    docs/deployment.md
+
+3.2 Changed
+    AuthService and AccountService call MailService instead of devDelivery.write
+    AuthDevDeliveryProperties keeps existing behaviour for FileMailService only
+    Dockerfile rewritten (multi-stage, non-root)
+    docker-compose.full.yml updated for the new image conventions
+    pom.xml: add spring-boot-starter-mail, logstash-logback-encoder
+    README: Slice 10 finally rolled out; "What's next" points beyond Slice 11
+
+
+--------------------------------------------------------------------------------
+4. ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+
+AC-11-1   With no app.mail.provider config set, the app boots and routes
+          all 4 link types through FileMailService. A new register writes
+          a verify-email entry to .tmp/auth-dev-links.txt (assuming
+          dev-delivery is enabled in the local profile).
+AC-11-2   With app.mail.provider=smtp and a valid spring.mail.host, the
+          app boots and routes all 4 link types through SmtpMailService.
+          No file is written.
+AC-11-3   When SmtpMailService throws on send (e.g. connection refused),
+          the calling endpoint still returns its documented success
+          response. A WARN is logged.
+AC-11-4   The SMTP message body is HTML and includes the link as a
+          clickable anchor with the same value as the link parameter.
+AC-11-5   The prod profile boots with app.mail.provider=smtp,
+          app.auth.dev-delivery.enabled=false, Hikari pool size 20, JSON
+          log output (one JSON object per line on stdout).
+AC-11-6   The Docker image runs as a non-root user (whoami inside the
+          container returns "lifeorg", not "root").
+AC-11-7   docker-compose -f docker-compose.full.yml up boots backend +
+          frontend + postgres and /actuator/health returns 200.
+AC-11-8   .env.prod.example contains every variable docs/deployment.md
+          references.
+AC-11-9   ArchUnit + JaCoCo gates stay green.
+AC-11-10  CodeQL stays clean (no new high-severity findings).
+
+
+--------------------------------------------------------------------------------
+5. OUT OF SCOPE (SLICE 11)
+--------------------------------------------------------------------------------
+
+* Inbound email (replies, bounces, complaints) - delivery only.
+* DKIM / SPF setup - operator's DNS concern, documented but not enforced.
+* Email queueing / retry on transient SMTP failures - best-effort send,
+  no persistent outbox.
+* Refresh-token revocation / token_version - separate slice candidate.
+* Frontend changes - none. Email delivery is invisible from the SPA's
+  point of view.
+* Observability (Prometheus / OTel) - deferred to a dedicated slice.
+* Multi-tenant deployment - this slice still assumes a single backend
+  per customer / family.
+
+
+================================================================================
+END OF SPEC - Slice 11
+================================================================================
