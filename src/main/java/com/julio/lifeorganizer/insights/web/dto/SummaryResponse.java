@@ -9,9 +9,11 @@ public record SummaryResponse(
         @JsonFormat(pattern = "yyyy-MM-dd") LocalDate to,
         BigDecimal totalIncome,
         BigDecimal totalExpense,
+        BigDecimal totalSavings,
         BigDecimal net,
         long incomeCount,
         long expenseCount,
+        long savingsCount,
         PeriodTotals previousPeriod
 ) {
 }

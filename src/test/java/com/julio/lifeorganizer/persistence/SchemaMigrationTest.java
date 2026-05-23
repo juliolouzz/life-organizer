@@ -61,15 +61,26 @@ class SchemaMigrationTest extends AbstractJpaTest {
     }
 
     @Test
-    void flywaySchemaHistory_recordsBothMigrations_asSuccess() {
+    void flywaySchemaHistory_recordsAllMigrations_asSuccess() {
         List<Map<String, Object>> history = jdbc.queryForList(
                 "SELECT version, success FROM flyway_schema_history ORDER BY installed_rank");
 
         assertThat(history)
                 .extracting(row -> row.get("version"))
-                .containsExactly("1", "2");
+                .containsExactly("1", "2", "3");
         assertThat(history)
                 .extracting(row -> row.get("success"))
                 .containsOnly(true);
+    }
+
+    @Test
+    void transactionsTypeCheck_acceptsSavingsAfterV3() {
+        // V3 extended the CHECK constraint; INSERT with SAVINGS should succeed.
+        // Use the test schema directly - no user fk constraint to satisfy on a quick check.
+        Integer ok = jdbc.queryForObject(
+                "SELECT 1 FROM information_schema.check_constraints "
+                        + "WHERE constraint_name = 'transactions_type_check' "
+                        + "AND check_clause LIKE '%SAVINGS%'", Integer.class);
+        assertThat(ok).isEqualTo(1);
     }
 }

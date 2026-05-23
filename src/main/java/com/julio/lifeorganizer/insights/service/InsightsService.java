@@ -45,12 +45,17 @@ public class InsightsService {
 
         return new SummaryResponse(
                 from, to,
-                current.income(), current.expense(), current.income().subtract(current.expense()),
-                current.incomeCount(), current.expenseCount(),
+                current.income(), current.expense(), current.savings(),
+                netOf(current),
+                current.incomeCount(), current.expenseCount(), current.savingsCount(),
                 new PeriodTotals(prevFrom, prevTo,
-                        previous.income(), previous.expense(),
-                        previous.income().subtract(previous.expense()))
+                        previous.income(), previous.expense(), previous.savings(),
+                        netOf(previous))
         );
+    }
+
+    private static BigDecimal netOf(Totals t) {
+        return t.income().subtract(t.expense()).subtract(t.savings());
     }
 
     public List<CategoryTotal> byCategory(Long userId, LocalDate from, LocalDate to) {
@@ -82,7 +87,9 @@ public class InsightsService {
             Map<TransactionType, BigDecimal> sums = grouped.getOrDefault(bucket, Map.of());
             BigDecimal income = scale(sums.getOrDefault(TransactionType.INCOME, ZERO));
             BigDecimal expense = scale(sums.getOrDefault(TransactionType.EXPENSE, ZERO));
-            result.add(new BucketTotal(bucket, income, expense, income.subtract(expense)));
+            BigDecimal savings = scale(sums.getOrDefault(TransactionType.SAVINGS, ZERO));
+            result.add(new BucketTotal(bucket, income, expense, savings,
+                    income.subtract(expense).subtract(savings)));
         }
         return new ByPeriodResult(result, granularity);
     }
@@ -119,18 +126,27 @@ public class InsightsService {
     private Totals totalsFor(Long userId, LocalDate from, LocalDate to) {
         BigDecimal income = ZERO;
         BigDecimal expense = ZERO;
+        BigDecimal savings = ZERO;
         long incomeCount = 0L;
         long expenseCount = 0L;
+        long savingsCount = 0L;
         for (TypeSumRow row : repository.sumByType(userId, from, to)) {
-            if (row.type() == TransactionType.INCOME) {
-                income = scale(row.total());
-                incomeCount = row.count();
-            } else {
-                expense = scale(row.total());
-                expenseCount = row.count();
+            switch (row.type()) {
+                case INCOME -> {
+                    income = scale(row.total());
+                    incomeCount = row.count();
+                }
+                case EXPENSE -> {
+                    expense = scale(row.total());
+                    expenseCount = row.count();
+                }
+                case SAVINGS -> {
+                    savings = scale(row.total());
+                    savingsCount = row.count();
+                }
             }
         }
-        return new Totals(income, expense, incomeCount, expenseCount);
+        return new Totals(income, expense, savings, incomeCount, expenseCount, savingsCount);
     }
 
     private static BigDecimal scale(BigDecimal v) {
@@ -149,6 +165,8 @@ public class InsightsService {
     public record ByPeriodResult(List<BucketTotal> data, Granularity granularity) {
     }
 
-    private record Totals(BigDecimal income, BigDecimal expense, long incomeCount, long expenseCount) {
+    private record Totals(
+            BigDecimal income, BigDecimal expense, BigDecimal savings,
+            long incomeCount, long expenseCount, long savingsCount) {
     }
 }

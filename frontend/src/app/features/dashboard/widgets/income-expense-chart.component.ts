@@ -80,6 +80,7 @@ export class IncomeExpenseChartComponent implements OnChanges {
 
     const incomeColor = readVar('--money-positive', '#22c55e');
     const expenseColor = readVar('--money-negative', '#ef4444');
+    const savingsColor = '#d97706';
 
     return {
       labels: this.buckets.map((b) => formatBucketLabel(b.bucket, this.granularity)),
@@ -89,14 +90,21 @@ export class IncomeExpenseChartComponent implements OnChanges {
           data: this.buckets.map((b) => Number(b.income)),
           backgroundColor: incomeColor,
           borderRadius: 6,
-          maxBarThickness: 32
+          maxBarThickness: 28
         },
         {
           label: 'Expenses',
           data: this.buckets.map((b) => Number(b.expense)),
           backgroundColor: expenseColor,
           borderRadius: 6,
-          maxBarThickness: 32
+          maxBarThickness: 28
+        },
+        {
+          label: 'Saved',
+          data: this.buckets.map((b) => Number(b.savings ?? 0)),
+          backgroundColor: savingsColor,
+          borderRadius: 6,
+          maxBarThickness: 28
         }
       ]
     };

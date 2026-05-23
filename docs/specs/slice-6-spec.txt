@@ -2,9 +2,8 @@
 LIFE ORGANIZER - SLICE 6 SPECIFICATION
 ================================================================================
 Project       : Life Organizer
-Slice         : 6 - CSV import
-Status        : DRAFT
-Depends on    : Slice 5 (categories as a first-class entity)
+Slice         : 6 - Budgets per category + recurring transactions
+Status        : DRAFT - approved for next session
 ================================================================================
 
 
@@ -12,63 +11,108 @@ Depends on    : Slice 5 (categories as a first-class entity)
 1. WHY
 --------------------------------------------------------------------------------
 
-First-time users have to manually type every past transaction they want to
-look at. That kills adoption. CSV import lets them backfill months or years
-of history in seconds.
+The dashboard from Slice 3 answers "what happened?" but not "am I on track?".
+Budgets turn the donut from a report into a guide ("you've used 80% of your
+Groceries budget"). Recurring transactions remove the friction of manually
+re-entering salary / rent / subscriptions every month.
+
+These two features go together because:
+- Categories are the shared dimension (you budget BY category; recurring
+  transactions belong TO a category)
+- Building both at once lets us promote "category" from free-text to a real
+  domain object exactly once instead of twice
 
 
 --------------------------------------------------------------------------------
-2. DECISIONS LEDGER (PROVISIONAL)
+2. DECISIONS LEDGER (LOCKED PROVISIONALLY - REVIEW BEFORE BUILDING)
 --------------------------------------------------------------------------------
 
 #   Decision
 --- ----------------------------------------------------------------------------
-1   Single endpoint:
-      POST /api/v1/transactions/import    multipart/form-data, key="file"
-    Accepts a UTF-8 CSV file up to 5 MB and ~100k rows.
-2   Expected CSV columns (header row REQUIRED, order can vary):
-      date,amount,type,category,description
-    "type" is INCOME or EXPENSE (case-insensitive).
-    "date" is ISO yyyy-MM-dd or dd/MM/yyyy (Brazilian common format).
-3   Categories that don't exist yet are auto-created (using Slice 5
-   categories table) with kind matching the row's type. Existing categories
-   are matched case-insensitively.
-4   Server returns a parse result, not the created rows:
-      { inserted: 87, skipped: 3, errors: [{ line: 5, message: "amount must be > 0" }] }
-    Errors per-line don't fail the whole upload - good rows still get saved.
-5   Idempotency: an "Idempotency-Key" header (optional) caches the result for
-    1h so accidental re-uploads don't double-insert. Without the header,
-    duplicate detection is by (user_id, date, amount, category, description)
-    natural key.
-6   File is parsed in a streaming way (line-by-line) so a 100k-row file
-    doesn't OOM the JVM. Spring Batch is overkill here; opencsv is enough.
-7   Rate limit: max 5 imports per hour per user (in-memory token bucket).
+1   Categories become a first-class entity:
+      categories(id, user_id, name, kind=INCOME|EXPENSE|BOTH, archived, ...)
+    Existing free-text categories on transactions are migrated by a
+    one-time backfill that creates a Category row per distinct (user, name).
+2   Each user owns their own categories (no global shared list).
+3   Slice 5 transactions UI surfaces an autocomplete with the user's existing
+    categories; new categories created on-the-fly when the user types one
+    that doesn't yet exist.
+4   Budgets are monthly and per-category:
+      budgets(id, user_id, category_id, amount, month, year, ...)
+    A budget covers one calendar month. To budget the same amount every month,
+    the UI sets "repeat monthly" which materialises rows on dashboard load.
+5   Dashboard gets a new "Budgets" widget below the category donut:
+    - one row per active budget for the period
+    - shows "spent / budget" and a progress bar
+    - over-budget rows render in red, on-track rows in green
+6   "All categories" budget shown as a top-line row summing every category
+    budget vs total expenses for the period.
+7   Recurring transactions are stored separately from regular transactions:
+      recurring_transactions(id, user_id, category_id, amount, type, description,
+        frequency=DAILY|WEEKLY|MONTHLY|YEARLY, start_date, end_date|null,
+        last_materialised_at|null, ...)
+    A scheduled job runs once per minute (or once on each request to GET
+    /transactions, whichever the architect picks) and materialises any
+    occurrences whose due date has passed but no transaction has been created.
+8   Materialised transactions point back to the recurring template via a
+    nullable transaction.recurring_id; deleting the recurring template does
+    NOT delete the materialised rows.
+9   Recurring transactions can be edited (changes apply to future occurrences
+    only) or paused (no new occurrences materialised while paused).
+10  Recurring transactions are managed from a new page /recurring, reachable
+    from the sidenav under Transactions.
 
 
 --------------------------------------------------------------------------------
-3. FRONTEND UX
+3. NEW ENDPOINTS (PROVISIONAL)
 --------------------------------------------------------------------------------
 
-New page: /transactions/import
+Categories
+  GET    /api/v1/categories                       list active categories
+  POST   /api/v1/categories                       create a new category
+  PUT    /api/v1/categories/{id}                  rename or change kind
+  DELETE /api/v1/categories/{id}                  archive (not hard delete)
 
-1. Drag-and-drop zone OR file picker
-2. Preview first 5 rows (parsed locally for sanity)
-3. Column mapper: if the user's CSV uses different headers, let them pick
-   "which column is the date?"
-4. Submit -> progress bar -> result card showing inserted / skipped / errors
-5. Click an error to see which row failed and why
-6. "Download a template CSV" link to seed the file
+Budgets
+  GET    /api/v1/budgets?month&year               list budgets for the month
+  POST   /api/v1/budgets                          create a budget
+  PUT    /api/v1/budgets/{id}                     update amount
+  DELETE /api/v1/budgets/{id}                     remove a budget
+
+Recurring
+  GET    /api/v1/recurring                        list active recurring rules
+  POST   /api/v1/recurring                        create a recurring rule
+  PUT    /api/v1/recurring/{id}                   edit (future occurrences only)
+  POST   /api/v1/recurring/{id}/pause             pause materialisation
+  POST   /api/v1/recurring/{id}/resume            resume materialisation
+  DELETE /api/v1/recurring/{id}                   delete the template
+
+Insights additions (read by dashboard widget)
+  GET    /api/v1/insights/budgets?month&year      per-category spent + budget
 
 
 --------------------------------------------------------------------------------
-4. OUT OF SCOPE
+4. NEW FRONTEND PAGES
 --------------------------------------------------------------------------------
 
-* Bank-specific OFX import (Nubank, Itau, etc.) - future slice
-* Excel (.xlsx) import - CSV only
-* PDF statement OCR
-* Importing into multiple users at once
-* Async / background processing (Slice 6 is synchronous up to 100k rows)
+/categories         CRUD page; chip-style cards
+/budgets            CRUD page; one card per month, list of category budgets
+/recurring          CRUD page; cards showing next occurrence + last materialised
+/dashboard          new widget: Budgets vs actual (after category donut)
+                    QuickAdd dialog now uses category autocomplete
+
+
+--------------------------------------------------------------------------------
+5. OUT OF SCOPE (SLICE 5)
+--------------------------------------------------------------------------------
+
+* Yearly / quarterly budgets (monthly only for now)
+* Rolling budgets (e.g., "any unused remains for next month")
+* Budget warnings via email or push notification
+* Recurring intervals other than DAILY/WEEKLY/MONTHLY/YEARLY (no "every 2nd Tuesday")
+* Multi-category transactions (one transaction = one category)
+* Budget templates / starter packs
+* Negotiable categories (no AI suggestions)
 
 
 ================================================================================

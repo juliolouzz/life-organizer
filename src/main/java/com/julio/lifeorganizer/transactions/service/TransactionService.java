@@ -48,7 +48,7 @@ public class TransactionService {
                 request.amount(),
                 request.type(),
                 request.category().trim(),
-                request.description().trim(),
+                cleanDescription(request.description()),
                 request.transactionDate());
         return TransactionResponse.from(repository.save(entity));
     }
@@ -98,9 +98,17 @@ public class TransactionService {
                 request.amount(),
                 request.type(),
                 request.category().trim(),
-                request.description().trim(),
+                cleanDescription(request.description()),
                 request.transactionDate());
         return TransactionResponse.from(repository.save(entity));
+    }
+
+    // Description is optional on the API (Slice 5). The DB column stays NOT NULL,
+    // so we coerce null / blank to "" here. Trimming is preserved for present values.
+    private static String cleanDescription(String raw) {
+        if (raw == null) return "";
+        String trimmed = raw.trim();
+        return trimmed.isEmpty() ? "" : trimmed;
     }
 
     @Transactional

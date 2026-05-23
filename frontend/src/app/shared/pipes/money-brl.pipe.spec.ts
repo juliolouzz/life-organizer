@@ -19,9 +19,10 @@ describe('MoneyBrlPipe', () => {
     expect(normalize(pipe.transform('10.5'))).toBe('R$ 10,50');
   });
 
-  it('prefixes + for INCOME and - for EXPENSE', () => {
+  it('prefixes + for INCOME, - for EXPENSE, >> for SAVINGS', () => {
     expect(normalize(pipe.transform('10.00', 'INCOME'))).toBe('+ R$ 10,00');
     expect(normalize(pipe.transform('10.00', 'EXPENSE'))).toBe('- R$ 10,00');
+    expect(normalize(pipe.transform('10.00', 'SAVINGS'))).toBe('>> R$ 10,00');
   });
 
   it('returns empty string for blank / null / NaN', () => {

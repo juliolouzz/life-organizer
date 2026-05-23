@@ -62,6 +62,10 @@ function toIso(d: Date): string {
             <span class="material-symbols-outlined">trending_up</span>
             Income
           </mat-button-toggle>
+          <mat-button-toggle value="SAVINGS">
+            <span class="material-symbols-outlined">savings</span>
+            Savings
+          </mat-button-toggle>
         </mat-button-toggle-group>
 
         <mat-form-field appearance="outline">
@@ -94,14 +98,13 @@ function toIso(d: Date): string {
         </mat-form-field>
 
         <mat-form-field appearance="outline">
-          <mat-label>Description</mat-label>
+          <mat-label>Description (optional)</mat-label>
           <input
             matInput
             formControlName="description"
             maxlength="255"
             data-testid="quick-description"
             placeholder="What was it for?"
-            required
           />
           @if (controlError('description'); as msg) { <mat-error>{{ msg }}</mat-error> }
         </mat-form-field>
@@ -182,9 +185,9 @@ export class QuickAddTransactionDialog {
 
   protected readonly form = this.fb.nonNullable.group({
     amount: this.fb.control<number | null>(null, [Validators.required, Validators.min(0.01)]),
-    type: ['EXPENSE' as 'EXPENSE' | 'INCOME', [Validators.required]],
+    type: ['EXPENSE' as 'EXPENSE' | 'INCOME' | 'SAVINGS', [Validators.required]],
     category: ['', [Validators.required, Validators.maxLength(50)]],
-    description: ['', [Validators.required, Validators.maxLength(255)]],
+    description: ['', [Validators.maxLength(255)]],
     transactionDate: this.fb.control<Date | null>(new Date(), [Validators.required])
   });
 
