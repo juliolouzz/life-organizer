@@ -9,6 +9,7 @@ public record PeriodTotals(
         @JsonFormat(pattern = "yyyy-MM-dd") LocalDate to,
         BigDecimal totalIncome,
         BigDecimal totalExpense,
+        BigDecimal totalSavings,
         BigDecimal net
 ) {
 }

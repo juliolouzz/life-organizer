@@ -6,7 +6,7 @@ import { map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, PageEnvelope } from '../../core/api/api-response';
 
-export type TransactionType = 'INCOME' | 'EXPENSE';
+export type TransactionType = 'INCOME' | 'EXPENSE' | 'SAVINGS';
 
 export interface Transaction {
   id: number;

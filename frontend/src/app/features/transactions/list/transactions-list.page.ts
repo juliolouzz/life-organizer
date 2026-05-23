@@ -49,6 +49,15 @@ import { Transaction, TransactionsService } from '../transactions.service';
       title="Transactions"
       subtitle="Income and expenses, ordered by date."
     >
+      <a
+        mat-stroked-button
+        routerLink="/dashboard"
+        class="cross-nav"
+        data-testid="goto-dashboard"
+      >
+        <span class="material-symbols-outlined nav-arrow">arrow_back</span>
+        Back to dashboard
+      </a>
       <a mat-flat-button color="primary" routerLink="/transactions/new" data-testid="new-transaction">
         <span class="material-symbols-outlined">add</span>
         New transaction
@@ -117,8 +126,13 @@ import { Transaction, TransactionsService } from '../transactions.service';
           <ng-container matColumnDef="type">
             <th mat-header-cell *matHeaderCellDef>Type</th>
             <td mat-cell *matCellDef="let r">
-              <span class="type-badge" [class.income]="r.type === 'INCOME'" [class.expense]="r.type === 'EXPENSE'">
-                {{ r.type === 'INCOME' ? 'Income' : 'Expense' }}
+              <span
+                class="type-badge"
+                [class.income]="r.type === 'INCOME'"
+                [class.expense]="r.type === 'EXPENSE'"
+                [class.savings]="r.type === 'SAVINGS'"
+              >
+                {{ typeLabel(r.type) }}
               </span>
             </td>
           </ng-container>
@@ -137,7 +151,8 @@ import { Transaction, TransactionsService } from '../transactions.service';
             <th mat-header-cell *matHeaderCellDef class="text-right">Amount</th>
             <td mat-cell *matCellDef="let r" class="numeric amount-cell"
                 [class.amount-income]="r.type === 'INCOME'"
-                [class.amount-expense]="r.type === 'EXPENSE'">
+                [class.amount-expense]="r.type === 'EXPENSE'"
+                [class.amount-savings]="r.type === 'SAVINGS'">
               {{ r.amount | moneyBrl: r.type }}
             </td>
           </ng-container>
@@ -186,6 +201,11 @@ import { Transaction, TransactionsService } from '../transactions.service';
   styles: [
     `
       :host { display: block; }
+      .cross-nav .nav-arrow {
+        font-size: 18px;
+        margin-right: 6px;
+        vertical-align: middle;
+      }
       .filter-card {
         padding: 16px 20px;
         margin-bottom: 24px;
@@ -231,6 +251,7 @@ import { Transaction, TransactionsService } from '../transactions.service';
       .amount-cell { text-align: right; font-weight: 600; }
       .amount-income { color: var(--money-positive); }
       .amount-expense { color: var(--money-negative); }
+      .amount-savings { color: #d97706; }
       .type-badge {
         display: inline-block;
         font-size: 0.75rem;
@@ -246,6 +267,10 @@ import { Transaction, TransactionsService } from '../transactions.service';
       .type-badge.expense {
         background: color-mix(in srgb, var(--text-muted) 15%, transparent);
         color: var(--text-muted);
+      }
+      .type-badge.savings {
+        background: color-mix(in srgb, #d97706 18%, transparent);
+        color: #d97706;
       }
       .table-footer {
         display: flex;
@@ -286,6 +311,10 @@ export class TransactionsListPage implements OnInit {
   protected fromAfterTo(): boolean {
     const { from, to } = this.filterForm.getRawValue();
     return !!(from && to && from > to);
+  }
+
+  protected typeLabel(type: 'INCOME' | 'EXPENSE' | 'SAVINGS'): string {
+    return type === 'INCOME' ? 'Income' : type === 'EXPENSE' ? 'Expense' : 'Saved';
   }
 
   ngOnInit(): void {

@@ -51,6 +51,15 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
       subtitle="How your money moved this period."
     >
       <app-period-selector [initial]="initialPreset" (rangeChange)="onRange($event)" />
+      <a
+        mat-stroked-button
+        routerLink="/transactions"
+        class="cross-nav"
+        data-testid="goto-transactions"
+      >
+        View all transactions
+        <span class="material-symbols-outlined nav-arrow">arrow_forward</span>
+      </a>
     </app-page-header>
 
     <button
@@ -96,11 +105,11 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
       />
       <app-stat-card
         icon="savings"
-        label="Savings rate"
-        accent="var(--mat-sys-primary, #7c3aed)"
-        [formattedValue]="savingsRateLabel()"
-        [hidden]="summary() === null || Number(summary()?.totalIncome ?? 0) === 0"
-        [caption]="'Net / Income'"
+        label="Saved"
+        accent="#d97706"
+        [value]="summary()?.totalSavings ?? null"
+        [caption]="(summary()?.savingsCount ?? 0) + ' transfer(s)'"
+        [deltaPct]="savingsDelta()"
         [loading]="loading()"
       />
     </section>
@@ -111,10 +120,10 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
         title="Nothing here yet"
         description="There are no transactions in this period. Add one to see your numbers come alive."
       >
-        <a mat-flat-button color="primary" routerLink="/transactions/new">
+        <button mat-flat-button color="primary" (click)="openQuickAdd()" data-testid="empty-state-add">
           <span class="material-symbols-outlined">add</span>
           Add a transaction
-        </a>
+        </button>
       </app-empty-state>
     } @else {
       <section class="charts-row">
@@ -192,6 +201,11 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
           right: 16px;
           bottom: 16px;
         }
+      }
+      .cross-nav .nav-arrow {
+        font-size: 18px;
+        margin-left: 6px;
+        vertical-align: middle;
       }
       .recent-section { margin-bottom: 16px; }
       .recent-card {
@@ -282,16 +296,7 @@ export class DashboardPage implements OnInit {
   protected readonly hasNoData = computed(() => {
     const s = this.summary();
     if (!s) return false;
-    return s.incomeCount + s.expenseCount === 0;
-  });
-
-  protected readonly savingsRateLabel = computed(() => {
-    const s = this.summary();
-    if (!s) return null;
-    const income = Number(s.totalIncome);
-    if (income === 0) return 'n/a';
-    const rate = (Number(s.net) / income) * 100;
-    return `${rate.toFixed(0)}%`;
+    return s.incomeCount + s.expenseCount + (s.savingsCount ?? 0) === 0;
   });
 
   protected readonly Number = Number;
@@ -301,6 +306,9 @@ export class DashboardPage implements OnInit {
   }
   protected incomeDelta(): number | null {
     return this.delta(this.summary()?.totalIncome, this.summary()?.previousPeriod?.totalIncome);
+  }
+  protected savingsDelta(): number | null {
+    return this.delta(this.summary()?.totalSavings, this.summary()?.previousPeriod?.totalSavings);
   }
   protected expenseDelta(): number | null {
     return this.delta(this.summary()?.totalExpense, this.summary()?.previousPeriod?.totalExpense);

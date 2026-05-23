@@ -6,7 +6,10 @@ import { Pipe, PipeTransform } from '@angular/core';
  */
 @Pipe({ name: 'moneyBrl', standalone: true })
 export class MoneyBrlPipe implements PipeTransform {
-  transform(value: string | number | null | undefined, withSign: 'INCOME' | 'EXPENSE' | null = null): string {
+  transform(
+    value: string | number | null | undefined,
+    withSign: 'INCOME' | 'EXPENSE' | 'SAVINGS' | null = null
+  ): string {
     if (value === null || value === undefined || value === '') return '';
     const num = typeof value === 'string' ? Number(value) : value;
     if (Number.isNaN(num)) return '';
@@ -16,12 +19,11 @@ export class MoneyBrlPipe implements PipeTransform {
       maximumFractionDigits: 2
     }).format(num);
 
-    const signed =
-      withSign === 'INCOME'
-        ? `+ R$ ${formatted}`
-        : withSign === 'EXPENSE'
-        ? `- R$ ${formatted}`
-        : `R$ ${formatted}`;
-    return signed;
+    switch (withSign) {
+      case 'INCOME': return `+ R$ ${formatted}`;
+      case 'EXPENSE': return `- R$ ${formatted}`;
+      case 'SAVINGS': return `>> R$ ${formatted}`;
+      default: return `R$ ${formatted}`;
+    }
   }
 }

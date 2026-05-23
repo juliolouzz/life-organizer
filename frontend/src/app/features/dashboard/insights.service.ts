@@ -14,6 +14,7 @@ export interface PeriodTotals {
   to: string;
   totalIncome: number | string;
   totalExpense: number | string;
+  totalSavings: number | string;
   net: number | string;
 }
 
@@ -22,9 +23,11 @@ export interface Summary {
   to: string;
   totalIncome: number | string;
   totalExpense: number | string;
+  totalSavings: number | string;
   net: number | string;
   incomeCount: number;
   expenseCount: number;
+  savingsCount: number;
   previousPeriod: PeriodTotals;
 }
 
@@ -39,6 +42,7 @@ export interface BucketTotal {
   bucket: string;
   income: number | string;
   expense: number | string;
+  savings: number | string;
   net: number | string;
 }
 

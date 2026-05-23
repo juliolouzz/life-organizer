@@ -16,7 +16,7 @@ public record UpdateTransactionRequest(
         @NotNull @Positive @Digits(integer = 13, fraction = 2) BigDecimal amount,
         @NotNull TransactionType type,
         @NotBlank @Size(max = 50) String category,
-        @NotBlank @Size(max = 255) String description,
+        @Size(max = 255) String description,
         @NotNull @JsonFormat(pattern = "yyyy-MM-dd") LocalDate transactionDate
 ) {
 }

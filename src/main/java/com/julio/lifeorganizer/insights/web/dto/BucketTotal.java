@@ -8,6 +8,7 @@ public record BucketTotal(
         @JsonFormat(pattern = "yyyy-MM-dd") LocalDate bucket,
         BigDecimal income,
         BigDecimal expense,
+        BigDecimal savings,
         BigDecimal net
 ) {
 }

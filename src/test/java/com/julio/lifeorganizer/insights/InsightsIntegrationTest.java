@@ -37,7 +37,7 @@ class InsightsIntegrationTest extends AbstractIntegrationTest {
                 Map.of("email", email, "password", "S3cretValue"), String.class);
         token = json.readTree(login.getBody()).get("data").get("accessToken").asText();
 
-        // Seed: 3 income (3 different dates) + 4 expenses (mixed categories)
+        // Seed: 3 income + 4 expenses + 2 savings (Slice 5)
         createTx("INCOME",  "5000.00", "Salary",    "Monthly salary",  "2026-05-01");
         createTx("INCOME",   "200.00", "Bonus",     "Project bonus",   "2026-05-15");
         createTx("INCOME",   "300.00", "Bonus",     "Late bonus",      "2026-05-15");
@@ -45,6 +45,8 @@ class InsightsIntegrationTest extends AbstractIntegrationTest {
         createTx("EXPENSE",  "412.50", "Groceries", "Week 1 shop",     "2026-05-07");
         createTx("EXPENSE",  "150.00", "Groceries", "Week 2 shop",     "2026-05-14");
         createTx("EXPENSE",   "60.00", "Transport", "Taxi",            "2026-05-20");
+        createTx("SAVINGS",  "500.00", "Emergency", "Monthly transfer", "2026-05-02");
+        createTx("SAVINGS",  "200.00", "Travel",    "Trip fund",       "2026-05-25");
     }
 
     @Test
@@ -54,9 +56,12 @@ class InsightsIntegrationTest extends AbstractIntegrationTest {
 
         assertThat(d.get("totalIncome").decimalValue()).isEqualByComparingTo("5500.00");
         assertThat(d.get("totalExpense").decimalValue()).isEqualByComparingTo("2122.50");
-        assertThat(d.get("net").decimalValue()).isEqualByComparingTo("3377.50");
+        assertThat(d.get("totalSavings").decimalValue()).isEqualByComparingTo("700.00");
+        // Slice 5: net = income - expense - savings
+        assertThat(d.get("net").decimalValue()).isEqualByComparingTo("2677.50");
         assertThat(d.get("incomeCount").asLong()).isEqualTo(3L);
         assertThat(d.get("expenseCount").asLong()).isEqualTo(4L);
+        assertThat(d.get("savingsCount").asLong()).isEqualTo(2L);
 
         JsonNode prev = d.get("previousPeriod");
         assertThat(prev.get("from").asText()).isEqualTo("2026-03-31");
@@ -104,16 +109,40 @@ class InsightsIntegrationTest extends AbstractIntegrationTest {
         assertThat(may1.get("income").decimalValue()).isEqualByComparingTo("5000.00");
         assertThat(may1.get("expense").decimalValue()).isEqualByComparingTo("0");
 
-        // 2026-05-02: empty -> zero
+        // 2026-05-02: only the 500 savings transfer, expense 0
         JsonNode may2 = data.get(1);
         assertThat(may2.get("bucket").asText()).isEqualTo("2026-05-02");
         assertThat(may2.get("income").decimalValue()).isEqualByComparingTo("0");
         assertThat(may2.get("expense").decimalValue()).isEqualByComparingTo("0");
+        assertThat(may2.get("savings").decimalValue()).isEqualByComparingTo("500.00");
+        assertThat(may2.get("net").decimalValue()).isEqualByComparingTo("-500.00");
 
         // 2026-05-05: expense 1500
         JsonNode may5 = data.get(4);
         assertThat(may5.get("expense").decimalValue()).isEqualByComparingTo("1500.00");
         assertThat(may5.get("net").decimalValue()).isEqualByComparingTo("-1500.00");
+    }
+
+    @Test
+    void createTransaction_withoutDescription_succeeds_andStoresEmptyString() throws Exception {
+        // Slice 5 AC-5-4: description is optional. Posting a row with no description field
+        // returns 201; reading it back shows description = "".
+        HttpHeaders h = new HttpHeaders();
+        h.setBearerAuth(token);
+        h.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<String> resp = http.exchange(
+                "/api/v1/transactions", HttpMethod.POST,
+                new HttpEntity<>(Map.of(
+                        "amount", "9.90",
+                        "type", "EXPENSE",
+                        "category", "Coffee",
+                        "transactionDate", "2026-05-22"
+                        // intentionally no "description"
+                ), h),
+                String.class);
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        JsonNode data = json.readTree(resp.getBody()).get("data");
+        assertThat(data.get("description").asText()).isEqualTo("");
     }
 
     @Test

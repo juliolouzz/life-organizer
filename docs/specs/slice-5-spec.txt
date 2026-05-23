@@ -2,8 +2,8 @@
 LIFE ORGANIZER - SLICE 5 SPECIFICATION
 ================================================================================
 Project       : Life Organizer
-Slice         : 5 - Budgets per category + recurring transactions
-Status        : DRAFT - approved for next session
+Slice         : 5 - UX fixes + SAVINGS transaction type
+Status        : APPROVED - building now
 ================================================================================
 
 
@@ -11,110 +11,156 @@ Status        : DRAFT - approved for next session
 1. WHY
 --------------------------------------------------------------------------------
 
-The dashboard from Slice 3 answers "what happened?" but not "am I on track?".
-Budgets turn the donut from a report into a guide ("you've used 80% of your
-Groceries budget"). Recurring transactions remove the friction of manually
-re-entering salary / rent / subscriptions every month.
-
-These two features go together because:
-- Categories are the shared dimension (you budget BY category; recurring
-  transactions belong TO a category)
-- Building both at once lets us promote "category" from free-text to a real
-  domain object exactly once instead of twice
+Daily friction the owner hit while using v0.4:
+- Clicking "Add transaction" on the dashboard empty state jumped to a new
+  page; the FAB already opens a dialog, so the empty-state CTA should match
+- Navigating between /dashboard and /transactions required going through the
+  sidenav even when both pages are equally "the place I'm working in"
+- Description is required even for an obvious expense like "Coffee R$5"
+- There was no way to track money set aside as savings; everything was either
+  spent (EXPENSE) or earned (INCOME), so the savings rate had no real signal
 
 
 --------------------------------------------------------------------------------
-2. DECISIONS LEDGER (LOCKED PROVISIONALLY - REVIEW BEFORE BUILDING)
+2. DECISIONS LEDGER (LOCKED)
 --------------------------------------------------------------------------------
 
 #   Decision
 --- ----------------------------------------------------------------------------
-1   Categories become a first-class entity:
-      categories(id, user_id, name, kind=INCOME|EXPENSE|BOTH, archived, ...)
-    Existing free-text categories on transactions are migrated by a
-    one-time backfill that creates a Category row per distinct (user, name).
-2   Each user owns their own categories (no global shared list).
-3   Slice 5 transactions UI surfaces an autocomplete with the user's existing
-    categories; new categories created on-the-fly when the user types one
-    that doesn't yet exist.
-4   Budgets are monthly and per-category:
-      budgets(id, user_id, category_id, amount, month, year, ...)
-    A budget covers one calendar month. To budget the same amount every month,
-    the UI sets "repeat monthly" which materialises rows on dashboard load.
-5   Dashboard gets a new "Budgets" widget below the category donut:
-    - one row per active budget for the period
-    - shows "spent / budget" and a progress bar
-    - over-budget rows render in red, on-track rows in green
-6   "All categories" budget shown as a top-line row summing every category
-    budget vs total expenses for the period.
-7   Recurring transactions are stored separately from regular transactions:
-      recurring_transactions(id, user_id, category_id, amount, type, description,
-        frequency=DAILY|WEEKLY|MONTHLY|YEARLY, start_date, end_date|null,
-        last_materialised_at|null, ...)
-    A scheduled job runs once per minute (or once on each request to GET
-    /transactions, whichever the architect picks) and materialises any
-    occurrences whose due date has passed but no transaction has been created.
-8   Materialised transactions point back to the recurring template via a
-    nullable transaction.recurring_id; deleting the recurring template does
-    NOT delete the materialised rows.
-9   Recurring transactions can be edited (changes apply to future occurrences
-    only) or paused (no new occurrences materialised while paused).
-10  Recurring transactions are managed from a new page /recurring, reachable
-    from the sidenav under Transactions.
+1   Dashboard empty state CTA opens the existing QuickAddTransactionDialog
+    instead of navigating to /transactions/new.
+2   Page header on /dashboard gets a "View all transactions" link (right
+    side); /transactions page header gets a "Back to dashboard" link.
+3   Description on transactions becomes optional. Backend keeps the DB column
+    NOT NULL but the application coerces missing / null / blank to "".
+    Validation still caps at 255 characters when present.
+4   New transaction type: SAVINGS. Added alongside INCOME and EXPENSE.
+    Semantics: money set aside; it reduces "net cash this period" without
+    being a true expense (the money is still yours, just spoken for).
+5   Net calculation on the dashboard changes to:
+        net = totalIncome - totalExpense - totalSavings
+    "Saved" gets its own stat card replacing the old "Savings rate" card.
+    Savings rate moves to a caption under the Net card.
+6   Income vs Expenses chart gains a third series: Saved (orange).
+7   Spending by category donut keeps its EXPENSE-only filter (savings is not
+    "spending" so it should not appear in that donut).
+8   /api/v1/insights/summary response gains a `totalSavings` field and the
+    previousPeriod object also gains `totalSavings`. Existing fields
+    (totalIncome, totalExpense, net) keep the same names; net now reflects the
+    new formula.
+9   /api/v1/insights/by-period BucketTotal record gains a `savings` field.
+    `net = income - expense - savings` per bucket.
+10  Backend migration V3 extends the CHECK constraint on transactions.type
+    to accept SAVINGS. No data migration needed (no SAVINGS rows exist yet).
+11  All existing tests that assume "net = income - expense" need updating
+    (zero existing rows have SAVINGS so totals stay numerically identical
+    when SAVINGS = 0; the formula change is invisible to old data).
 
 
 --------------------------------------------------------------------------------
-3. NEW ENDPOINTS (PROVISIONAL)
+3. BEHAVIOUR CHANGES
 --------------------------------------------------------------------------------
 
-Categories
-  GET    /api/v1/categories                       list active categories
-  POST   /api/v1/categories                       create a new category
-  PUT    /api/v1/categories/{id}                  rename or change kind
-  DELETE /api/v1/categories/{id}                  archive (not hard delete)
+3.1 Empty state on /dashboard
+-----------------------------
+Before: button navigated to /transactions/new (RouterLink).
+After:  button opens QuickAddTransactionDialog. After save, dashboard
+        widgets re-fetch (same flow as the FAB).
 
-Budgets
-  GET    /api/v1/budgets?month&year               list budgets for the month
-  POST   /api/v1/budgets                          create a budget
-  PUT    /api/v1/budgets/{id}                     update amount
-  DELETE /api/v1/budgets/{id}                     remove a budget
+3.2 Page header cross-navigation
+--------------------------------
+/dashboard header:    [..title..]  [period selector]  [View all transactions ->]
+/transactions header: [<- Back to dashboard]  [...title...]  [New transaction]
 
-Recurring
-  GET    /api/v1/recurring                        list active recurring rules
-  POST   /api/v1/recurring                        create a recurring rule
-  PUT    /api/v1/recurring/{id}                   edit (future occurrences only)
-  POST   /api/v1/recurring/{id}/pause             pause materialisation
-  POST   /api/v1/recurring/{id}/resume            resume materialisation
-  DELETE /api/v1/recurring/{id}                   delete the template
+3.3 Description optional
+------------------------
+- CreateTransactionRequest.description: @Size(max=255) only (no @NotBlank)
+- UpdateTransactionRequest.description: same
+- TransactionService.create / update: if description is null or blank, store
+  "" (empty string) instead of NULL — preserves DB NOT NULL constraint
+- Frontend forms: drop "required" on description; show placeholder
 
-Insights additions (read by dashboard widget)
-  GET    /api/v1/insights/budgets?month&year      per-category spent + budget
+3.4 SAVINGS as a transaction type
+---------------------------------
+- Type toggle in forms becomes 3-way:
+      [Expense] [Income] [Savings]
+- A SAVINGS row appears in:
+      * /transactions list (with a "Saved" badge, orange tint)
+      * Income vs Expenses bar chart (third series, orange)
+      * "Saved" stat card on dashboard
+- A SAVINGS row does NOT appear in:
+      * Spending by category donut (EXPENSE-only)
+- MoneyBrlPipe sign-prefix:
+      INCOME  -> "+ R$ ..."
+      EXPENSE -> "- R$ ..."
+      SAVINGS -> ">> R$ ..."   (marks "moved to savings")
 
 
 --------------------------------------------------------------------------------
-4. NEW FRONTEND PAGES
+4. ENDPOINTS AFFECTED
 --------------------------------------------------------------------------------
 
-/categories         CRUD page; chip-style cards
-/budgets            CRUD page; one card per month, list of category budgets
-/recurring          CRUD page; cards showing next occurrence + last materialised
-/dashboard          new widget: Budgets vs actual (after category donut)
-                    QuickAdd dialog now uses category autocomplete
+GET /api/v1/insights/summary
+  data adds:
+    "totalSavings":      "200.00"
+    "savingsCount":       2
+    "previousPeriod":
+      "totalSavings":    "0.00"
+  data.net keeps its name but is now income - expense - savings
+
+GET /api/v1/insights/by-period
+  Each bucket gains:
+    "savings": "50.00"
+  net per bucket becomes income - expense - savings
+
+GET /api/v1/insights/by-category
+  No structural change. SAVINGS-type rows now appear in the list. Frontend
+  donut still filters to EXPENSE only.
+
+POST /api/v1/transactions          (and PUT, GET)
+  type: now accepts INCOME | EXPENSE | SAVINGS
+  description: optional (defaults to "")
 
 
 --------------------------------------------------------------------------------
-5. OUT OF SCOPE (SLICE 5)
+5. ACCEPTANCE CRITERIA
 --------------------------------------------------------------------------------
 
-* Yearly / quarterly budgets (monthly only for now)
-* Rolling budgets (e.g., "any unused remains for next month")
-* Budget warnings via email or push notification
-* Recurring intervals other than DAILY/WEEKLY/MONTHLY/YEARLY (no "every 2nd Tuesday")
-* Multi-category transactions (one transaction = one category)
-* Budget templates / starter packs
-* Negotiable categories (no AI suggestions)
+AC-5-1   Dashboard empty state button opens the QuickAdd dialog and stays on
+         /dashboard.
+AC-5-2   /dashboard header shows "View all transactions" link that navigates
+         to /transactions.
+AC-5-3   /transactions header shows "Back to dashboard" link that navigates
+         to /dashboard.
+AC-5-4   POST /api/v1/transactions with no description returns 201; the saved
+         row has description="" (empty string, not NULL).
+AC-5-5   Existing rows in the DB with non-empty descriptions are unaffected.
+AC-5-6   POST /api/v1/transactions with type=SAVINGS returns 201; row visible
+         in GET list.
+AC-5-7   GET /insights/summary returns totalSavings + savingsCount; net =
+         income - expense - savings.
+AC-5-8   GET /insights/by-period returns a savings field per bucket; bucket
+         net reflects the new formula.
+AC-5-9   Dashboard renders a "Saved" stat card with locale-formatted total.
+AC-5-10  Income vs Expenses chart renders a third "Saved" series in orange.
+AC-5-11  Category donut continues to render EXPENSE-only.
+AC-5-12  Backend tests all pass after the type expansion.
+AC-5-13  Frontend tests all pass; lint clean.
+
+
+--------------------------------------------------------------------------------
+6. OUT OF SCOPE (SLICE 5)
+--------------------------------------------------------------------------------
+
+* Categories as a first-class entity (deferred to Slice 6)
+* Budgets per category (Slice 6)
+* Recurring transactions (Slice 6)
+* CSV import (Slice 7)
+* Forgot password / email verification / rate limiting (Slice 8)
+* Per-savings goals (savings = 1 bucket today; bucket-per-goal later)
+* Migrating existing rows to a savings type (none exist yet)
 
 
 ================================================================================
-END OF DRAFT SPEC - Slice 5
+END OF SPEC - Slice 5
 ================================================================================

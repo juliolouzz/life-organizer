@@ -23,7 +23,6 @@ public record CreateTransactionRequest(
         @Size(max = 50, message = "must be at most 50 characters")
         String category,
 
-        @NotBlank(message = "must not be blank")
         @Size(max = 255, message = "must be at most 255 characters")
         String description,
 
