@@ -51,7 +51,10 @@ export class AccountService {
       .patch<ApiResponse<AuthenticatedUser>>(`${this.base}/me`, payload)
       .pipe(
         map((res) => this.requireData(res)),
-        tap(() => this.auth.fetchMe().subscribe())
+        // PATCH /me returns the new user state; push it straight into the
+        // signal so the Money pipe + currency symbol update on the same
+        // tick instead of waiting on a follow-up GET /me roundtrip.
+        tap((user) => this.auth.setCurrentUser(user))
       );
   }
 
@@ -78,7 +81,9 @@ export class AccountService {
       .post<ApiResponse<AuthenticatedUser>>(`${this.base}/me/restore`, {})
       .pipe(
         map((res) => this.requireData(res)),
-        tap(() => this.auth.fetchMe().subscribe())
+        // Same pattern as updateProfile: feed the new user back into the
+        // signal so deletionScheduledAt clears immediately.
+        tap((user) => this.auth.setCurrentUser(user))
       );
   }
 

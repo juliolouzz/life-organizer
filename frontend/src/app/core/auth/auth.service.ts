@@ -124,6 +124,16 @@ export class AuthService {
       );
   }
 
+  /**
+   * Replace the cached current-user with the payload from any endpoint that
+   * returns the full UserResponse shape (PATCH /me, /me/restore, etc.).
+   * Avoids the extra GET /me roundtrip and ensures signal-driven UI
+   * (Money pipe, currency symbol, banner) updates synchronously.
+   */
+  setCurrentUser(user: AuthenticatedUser): void {
+    this.currentUserSig.set(user);
+  }
+
   fetchMe(): Observable<AuthenticatedUser> {
     return this.http
       .get<ApiResponse<AuthenticatedUser>>(`${this.base}/me`)
