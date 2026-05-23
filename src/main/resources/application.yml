@@ -41,6 +41,13 @@ app:
   pagination:
     default-limit: 20
     max-limit: 100
+  auth:
+    # Off by default - tokens never leave memory in this configuration. Self-hosted
+    # operators without SMTP can opt in (see AuthDevDeliveryProperties) to have
+    # reset / verify links appended to a local file.
+    dev-delivery:
+      enabled: ${APP_AUTH_DEV_DELIVERY_ENABLED:false}
+      file-path: ${APP_AUTH_DEV_DELIVERY_FILE:.tmp/auth-dev-links.txt}
 
 management:
   endpoints:

@@ -1,0 +1,17 @@
+name: Life Organizer CodeQL config
+
+# Custom queries on top of the standard security-and-quality suite.
+queries:
+  - uses: security-and-quality
+
+# Documented suppressions for queries that fire on intentional, reviewed
+# design choices. Each entry must include a rationale comment.
+query-filters:
+  # CSRF protection is intentionally disabled in SecurityConfig: this is a pure
+  # JSON API authenticated by stateless JWTs sent in the Authorization header.
+  # Browsers do not auto-attach Authorization headers cross-site, so the
+  # ambient-credential precondition for CSRF does not hold. The reasoning is
+  # documented inline in SecurityConfig.java. If we ever add cookie/session
+  # auth, this suppression must be removed and CSRF re-enabled.
+  - exclude:
+      id: java/spring-disabled-csrf-protection
