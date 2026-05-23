@@ -1,0 +1,289 @@
+================================================================================
+LIFE ORGANIZER - SLICE 3 SPECIFICATION
+================================================================================
+Project       : Life Organizer
+Slice         : 3 - Dashboard with balance, charts, and period comparisons
+Backend stack : same as Slice 1
+Frontend stack: same as Slice 2 + Chart.js v4 + ng2-charts
+Approved by   : julio.cdl.vet@gmail.com
+Status        : APPROVED - ready for build
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1. WHY
+--------------------------------------------------------------------------------
+
+After using Slice 1+2 the owner reported that adding income / expense rows is
+not enough by itself to be useful. The product needs to surface the answers
+people open a personal-finance app for:
+
+    Q1  How much did I earn / spend this period?
+    Q2  What's my net (am I saving or overspending)?
+    Q3  Where did the money go (which categories)?
+    Q4  How does this period compare to the previous one?
+    Q5  How is the spend distributed across the month / year?
+
+Slice 3 closes those questions with a Dashboard page backed by three new
+aggregation endpoints.
+
+
+--------------------------------------------------------------------------------
+2. DECISIONS LEDGER (LOCKED)
+--------------------------------------------------------------------------------
+
+#   Decision
+--- ----------------------------------------------------------------------------
+1   Dashboard becomes the default landing route after login (replaces
+    redirectTo: 'transactions'). Transactions stays reachable from the sidenav.
+2   Aggregation is done server-side via SUM + GROUP BY in JPQL. The frontend
+    never loads all transactions to compute totals.
+3   Three new endpoints, all auth-required:
+      GET /api/v1/insights/summary?from&to
+      GET /api/v1/insights/by-category?from&to
+      GET /api/v1/insights/by-period?from&to&granularity
+4   "Net" = totalIncome - totalExpense. Positive = saving.
+5   All amounts in BRL (matches Slice 1 decision 12).
+6   Default period: current calendar month (1st to today).
+7   Period presets surfaced in the UI: this month, last month, last 3 months,
+    this year, all time, custom.
+8   Comparison: each stat card shows previous-period totals + a percentage
+    delta (+/-) so the user sees trends without leaving the page.
+9   Granularity for the income-vs-expense chart:
+      <= 31 days range  -> daily
+      <= 90 days        -> weekly (Mon-Sun, ISO weeks)
+      else              -> monthly
+    Client passes from/to and a granularity hint; backend honours it.
+10  Top-N for category breakdown: 8 in the chart, rest grouped as "Other".
+11  Recent transactions widget shows the last 5 active transactions across the
+    whole account (independent of dashboard date filter).
+12  Soft-deleted rows are excluded from EVERY aggregation (mirrors Slice 1).
+13  Empty dashboard (zero rows in period) shows an empty state with a primary
+    "Add a transaction" call to action.
+14  Chart library: Chart.js v4 + ng2-charts v5; CSS variables drive colours
+    so dark mode works without re-instantiating the chart.
+15  Currency formatting reuses the existing MoneyBrlPipe.
+
+
+--------------------------------------------------------------------------------
+3. NEW BACKEND ENDPOINTS
+--------------------------------------------------------------------------------
+
+3.1 GET /api/v1/insights/summary
+--------------------------------
+Query params:
+  from   LocalDate, required (ISO yyyy-MM-dd)
+  to     LocalDate, required, must be >= from
+
+Success 200:
+{
+  "success": true,
+  "data": {
+    "from": "2026-05-01",
+    "to":   "2026-05-31",
+    "totalIncome":  "1234.56",
+    "totalExpense": "789.10",
+    "net":          "445.46",
+    "incomeCount":   12,
+    "expenseCount":  31,
+    "previousPeriod": {
+      "from": "2026-04-01",
+      "to":   "2026-04-30",
+      "totalIncome":  "1000.00",
+      "totalExpense": "950.00",
+      "net":          "50.00"
+    }
+  },
+  "message": null,
+  "meta":    null
+}
+
+Notes:
+- previousPeriod has the same span length as [from, to] and ends the day
+  before `from`. If `from` is the 1st of a month and `to` is the last day,
+  previousPeriod is the previous calendar month.
+- All amounts use NUMERIC(15,2) precision and serialise as decimal strings.
+- Returns zeros (not null) when no rows match.
+
+Errors:
+  400  from > to                            INVALID_QUERY
+  400  from or to missing                   validation map
+  401  auth failures
+
+3.2 GET /api/v1/insights/by-category
+------------------------------------
+Query params: same as 3.1.
+
+Success 200:
+{
+  "success": true,
+  "data": [
+    { "category": "Groceries", "type": "EXPENSE", "total": "412.50", "count": 9 },
+    { "category": "Rent",      "type": "EXPENSE", "total": "1500.00", "count": 1 },
+    { "category": "Salary",    "type": "INCOME",  "total": "5000.00", "count": 1 }
+  ],
+  "message": null,
+  "meta":    { "from": "2026-05-01", "to": "2026-05-31" }
+}
+
+Notes:
+- Sorted by total DESC.
+- Both INCOME and EXPENSE returned; the client picks how to split.
+
+3.3 GET /api/v1/insights/by-period
+----------------------------------
+Query params:
+  from         LocalDate, required
+  to           LocalDate, required
+  granularity  string, optional, one of DAY | WEEK | MONTH
+               default: backend chooses (per decision 9)
+
+Success 200:
+{
+  "success": true,
+  "data": [
+    {
+      "bucket": "2026-05-01",
+      "income":  "100.00",
+      "expense": "25.00",
+      "net":     "75.00"
+    },
+    { "bucket": "2026-05-02", "income": "0.00", "expense": "12.30", "net": "-12.30" }
+  ],
+  "message": null,
+  "meta": { "from": "2026-05-01", "to": "2026-05-31", "granularity": "DAY" }
+}
+
+Notes:
+- bucket is the ISO start date of the period (Mon for WEEK; 1st for MONTH).
+- Empty buckets within [from, to] are filled with zeros so the chart shows a
+  continuous timeline.
+
+
+--------------------------------------------------------------------------------
+4. FRONTEND - DASHBOARD PAGE
+--------------------------------------------------------------------------------
+
+Route       : /dashboard (lazy-loaded)
+Default     : after login, redirect to /dashboard instead of /transactions
+Sidenav     : Dashboard appears above Transactions, with icon "dashboard"
+
+4.1 Layout (top to bottom)
+--------------------------
+1. Page header
+     "Dashboard"
+     subtitle: "How your money moved this period."
+     right: PeriodSelector
+
+2. Stat cards row (4 cards, grid auto-fit min 220px)
+     a. Net (income - expense for selected period)
+         - big number in monospace
+         - colour: positive=money-positive, negative=money-negative
+         - small "vs previous period: +12%" delta indicator with up/down arrow
+     b. Income
+         - total + transaction count
+         - delta vs previous period
+     c. Expenses
+         - total + transaction count
+         - delta vs previous period
+     d. Savings rate
+         - net / income as a percentage (0% when income=0)
+         - shown as progress arc
+
+3. Income vs Expenses over time chart
+     - stacked bar / grouped bar (income green, expense neutral-red)
+     - X axis: buckets per granularity
+     - Y axis: BRL
+     - title with the selected granularity ("Daily", "Weekly", "Monthly")
+
+4. Spending by category donut
+     - top 8 categories by total, rest as "Other"
+     - centre: total expense for period
+     - clickable legend toggles slices
+     - subtitle indicates EXPENSE only (donut is one type)
+
+5. Recent transactions card
+     - last 5 active transactions (independent of period filter)
+     - each row: date + category + description + amount (signed)
+     - "View all" link -> /transactions
+
+6. Empty state (when summary.incomeCount + expenseCount == 0 for the period)
+     - icon, message, "Add a transaction" primary button
+
+4.2 Period selector (mat-button-toggle-group)
+---------------------------------------------
+Presets: This month | Last month | Last 3 months | This year | All time | Custom
+Custom opens two MatDatepickers in a popover; Apply triggers a refresh.
+
+When period changes, all four widgets re-fetch in parallel.
+
+4.3 Loading + error states
+--------------------------
+- Skeletons for the four cards while summary is loading.
+- Spinner overlay for charts while they fetch.
+- Snackbar on network error (handled by existing errorInterceptor).
+
+
+--------------------------------------------------------------------------------
+5. ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+
+Backend (AC-I)
+--------------
+AC-I1   GET /insights/summary returns totalIncome + totalExpense + net for the
+        requested period, sourced from active (deleted_at IS NULL) rows only.
+AC-I2   Summary previousPeriod is the same-span window ending the day before
+        `from`.
+AC-I3   Summary returns zeros (not null) when no rows match.
+AC-I4   GET /insights/by-category aggregates SUM(amount) per (category, type)
+        and sorts by total DESC.
+AC-I5   GET /insights/by-period buckets by DAY/WEEK/MONTH and fills empty
+        buckets with zeros for a continuous series.
+AC-I6   All insights endpoints scope by user_id taken from the JWT subject.
+AC-I7   All insights endpoints reject `from > to` with 400 INVALID_QUERY.
+AC-I8   All insights endpoints reject missing `from` or `to` with 400 + meta
+        field map.
+AC-I9   All insights endpoints return 401 UNAUTHORIZED when no Bearer token
+        is supplied.
+
+Frontend (AC-DF)
+----------------
+AC-DF1  /dashboard is the default route after successful login.
+AC-DF2  Period selector default = current calendar month.
+AC-DF3  Net card shows totalIncome - totalExpense; positive renders in green,
+        negative in red.
+AC-DF4  Income and Expense cards show the previous-period total + signed
+        percentage delta; 0 -> "no prior data".
+AC-DF5  Savings rate card shows (net / income * 100) rounded to whole percent;
+        income=0 renders "n/a".
+AC-DF6  Income vs Expense chart picks daily/weekly/monthly granularity per
+        decision 9.
+AC-DF7  Category donut shows top 8 expense categories + "Other" bucket.
+AC-DF8  Recent transactions widget shows up to 5 most recent active rows,
+        independent of the period filter.
+AC-DF9  Empty period state shows the empty illustration with primary
+        "Add a transaction" CTA.
+AC-DF10 Period change re-fetches all four widgets without a full page reload.
+AC-DF11 Dashboard renders correctly in both light and dark mode.
+AC-DF12 No console.log / no any / lint clean.
+
+
+--------------------------------------------------------------------------------
+6. OUT OF SCOPE (SLICE 3)
+--------------------------------------------------------------------------------
+
+* Budgets / target spending per category
+* Recurring transaction detection
+* Predictions / forecasting
+* CSV / PDF export of the dashboard
+* Multi-currency conversion
+* Net worth across accounts (no accounts entity exists)
+* Tags / labels beyond category
+* Drag-and-drop chart customisation
+* Saved custom periods / date presets
+* Notifications when overspending
+
+
+================================================================================
+END OF SPEC - Slice 3
+================================================================================
