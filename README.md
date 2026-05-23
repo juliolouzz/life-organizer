@@ -9,6 +9,10 @@ Personal finance + life management.
 - **Slice 1**: Spring Boot 3 REST API (Users + JWT auth + Transactions CRUD)
 - **Slice 2**: Angular 17 + Material 3 frontend consuming the API
 - **Slice 3**: Dashboard — balance, income vs expense charts, category donut, period comparisons
+- **Slice 4**: Quick-add transaction dialog on the dashboard + full Docker stack (run anywhere with `docker compose up`)
+- **Slice 5**: UX fixes (cross-page nav, optional description, empty-state dialog) + **SAVINGS** as a third transaction type with a dedicated dashboard card and chart series
+- **Slice 6**: **Categories** as a first-class entity, **monthly budgets per category** with progress-bar widget on the dashboard, **recurring transactions** with auto-materialisation on every transactions list call
+- **Slice 7**: **CSV import** for backfilling transactions — accepts ISO or BR-format dates, dot or comma decimals, optional description column, auto-creates categories, per-row error reporting
 
 > Behavioural contracts: [`docs/specs/slice-1-spec.txt`](docs/specs/slice-1-spec.txt) · [`docs/specs/slice-2-spec.txt`](docs/specs/slice-2-spec.txt)
 > Architectures: [`slice-1-architecture.md`](docs/specs/slice-1-architecture.md) · [`slice-2-architecture.md`](docs/specs/slice-2-architecture.md)
@@ -119,19 +123,42 @@ All endpoints under `/api/v1`. Response envelope:
 { "success": true|false, "data": <T>|null, "message": "..."|null, "meta": {...}|null }
 ```
 
+### Auth & users
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
 | POST | `/auth/register` | none | create user, returns 201 |
 | POST | `/auth/login` | none | returns access + refresh JWT pair |
 | POST | `/auth/refresh` | refresh JWT | new access token |
 | GET | `/me` | access JWT | the authenticated user |
-| POST | `/transactions` | access JWT | create transaction |
-| GET | `/transactions` | access JWT | list with keyset pagination |
+
+### Transactions
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| POST | `/transactions` | access JWT | create (type ∈ {INCOME, EXPENSE, SAVINGS}; description optional) |
+| GET | `/transactions` | access JWT | list with keyset pagination; auto-materialises due recurring rows |
 | GET | `/transactions/{id}` | access JWT | get one |
 | PUT | `/transactions/{id}` | access JWT | replace all fields |
 | DELETE | `/transactions/{id}` | access JWT | soft delete |
+| POST | `/transactions/import` | access JWT | multipart CSV import |
 
-Full request/response schemas, validation rules, and error codes are in `docs/specs/slice-1-spec.txt` §6.
+### Insights (dashboard)
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/insights/summary?from&to` | access JWT | totals + counts + previous-period comparison |
+| GET | `/insights/by-category?from&to` | access JWT | per-category aggregation |
+| GET | `/insights/by-period?from&to&granularity?` | access JWT | bucketed time series |
+
+### Categories, budgets, recurring (Slice 6)
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET/POST/PUT/DELETE | `/categories[/{id}]` | access JWT | CRUD + archive (DELETE archives, not hard-delete) |
+| GET/POST/PUT/DELETE | `/budgets[/{id}]?year&month` | access JWT | monthly budget per category |
+| GET | `/budgets/status?year&month` | access JWT | budget-vs-actual per category for the period |
+| GET/POST/PUT/DELETE | `/recurring[/{id}]` | access JWT | recurring rule CRUD |
+| POST | `/recurring/{id}/pause` | access JWT | stop materialising |
+| POST | `/recurring/{id}/resume` | access JWT | resume materialising |
+
+Full request/response schemas, validation rules, and error codes are in `docs/specs/slice-1-spec.txt` §6, `slice-5-spec.txt`, `slice-6-spec.txt`, and `slice-7-spec.txt`.
 
 ## Module Layout
 
@@ -144,10 +171,19 @@ common/         ApiResponse + PageMeta records, exception hierarchy,
                 GlobalExceptionHandler, RequestIdFilter
 auth/           Role enum, UserEntity, UserRepository, JwtService, AuthService,
                 JwtAuthenticationFilter, AuthController, UserController, DTOs
-transactions/   TransactionType, CursorCodec, TransactionEntity, repository,
-                TransactionService, TransactionController, DTOs
+transactions/   TransactionType (INCOME/EXPENSE/SAVINGS), CursorCodec,
+                TransactionEntity, TransactionService (writable list with
+                materialiser hook), CsvImportService, TransactionController,
+                TransactionImportController, DTOs
 insights/       InsightsService, InsightsController (3 aggregation endpoints),
                 CategoryTotalRow / TypeSumRow / DailyBucketRow projections, DTOs
+categories/     CategoryEntity (id, user_id, name, kind, archived),
+                CategoryService, CategoryController + DTOs
+budgets/        BudgetEntity, BudgetService (status = budget-vs-actual join),
+                BudgetController + DTOs
+recurring/      RecurringTransactionEntity, Frequency enum,
+                RecurringMaterialiser (cap 365/call), RecurringService,
+                RecurringController + DTOs
 ```
 
 ### Frontend (`frontend/src/app/`)
@@ -172,18 +208,29 @@ features/
   profile               ProfilePage
   transactions/list     TransactionsListPage (table, filters, pagination)
   transactions/form     TransactionFormPage (create + edit unified)
-  dashboard             DashboardPage + 3 widgets (stat-card, income-expense-chart,
-                        category-donut), PeriodSelector, InsightsService
+  transactions/import   TransactionsImportPage (CSV upload + per-row result)
+  dashboard             DashboardPage + 4 widgets (stat-card, income-expense-chart,
+                        category-donut, budgets-widget), PeriodSelector,
+                        QuickAddTransactionDialog, InsightsService
+  categories            CategoriesPage + CategoriesService
+  budgets               BudgetsPage + BudgetsService
+  recurring             RecurringPage + RecurringService
   not-found             NotFoundPage
 ```
 
 ## Status
 
-**Slice 1**: complete — 52 backend tests pass via `mvn verify`, JaCoCo ≥80% on service + web, ArchUnit clean, full flow validated against live Postgres ([run evidence](docs/run-evidence.md)).
+All 7 slices complete and merged through PRs with green CI + branch protection enforced.
 
-**Slice 2**: complete — Angular 17 frontend builds, lints, and unit-tests clean; Material 3 theme with dark mode; full register → login → transactions CRUD UI; Playwright E2E covers the happy path.
+- **Slice 1**: REST API + JWT auth + transactions CRUD ([run evidence](docs/run-evidence.md))
+- **Slice 2**: Angular 17 + Material 3 frontend
+- **Slice 3**: Dashboard with charts + period comparisons
+- **Slice 4**: Quick-add dialog + full Docker stack
+- **Slice 5**: UX fixes + SAVINGS type
+- **Slice 6**: Categories + budgets + recurring transactions
+- **Slice 7**: CSV import
 
-**Slice 3**: complete — Dashboard at `/dashboard` (new default landing) with 4 stat cards (net, income, expenses, savings rate), Income-vs-Expense bar chart with auto granularity, category donut (top 8 + Other), recent transactions card, period selector (this month / last month / last 3 months / this year / all time / custom). Three new server-side aggregation endpoints under `/api/v1/insights`. 6 new backend integration tests + 6 new frontend unit tests.
+**Numbers**: 45 backend integration tests + 17 frontend unit tests, JaCoCo ≥80% on service + web packages, ArchUnit layering rules enforced, CodeQL clean, branch protection on `main` requires CI green + no force-pushes.
 
 ### Backend ACs
 
@@ -202,14 +249,34 @@ features/
 | AC-F-T1..T14 — Transactions UI | 14 | implemented |
 | AC-F-X1..X12 — Cross-cutting | 12 | implemented |
 
+## Slice tags
+
+| Tag | Slice |
+|---|---|
+| `v0.1.0` | Backend (Users + JWT + Transactions CRUD) |
+| `v0.2.0` | Angular 17 + Material 3 frontend |
+| `v0.3.0` | Dashboard with charts |
+| `v0.4.0` / `v0.4.1` | Docker stack + quick-add dialog (.1 = CORS fix for browsers) |
+| `v0.5.0` | UX fixes + SAVINGS type |
+| `v0.6.0` | Categories + budgets + recurring |
+| `v0.7.0` | CSV import |
+
 ## What's next
 
-- Production profile (`application-prod.yml`), app `Dockerfile`, real secret manager
-- Observability: Micrometer / Prometheus, OpenTelemetry tracing
-- Branch protection rules on `main` requiring CI green
-- Health / fitness vertical, diary vertical
-- Reports, budgets, recurring transactions
-- See [`docs/specs/slice-1-spec.txt`](docs/specs/slice-1-spec.txt) §9 and [`docs/specs/slice-2-spec.txt`](docs/specs/slice-2-spec.txt) §9 for explicitly deferred scope.
+- **Slice 8** — Auth completeness: password reset, email verification, rate limiting
+- **Hosting** — production profile, image registry, deployment guide for Fly.io / Railway
+- **Observability** — Micrometer / Prometheus, OpenTelemetry tracing, JSON logs
+- **Other verticals** — health / fitness, diary, reminders, goals
+
+See [`docs/specs/`](docs/specs/) for behavioural contracts and ADRs.
+
+## Development workflow
+
+- `main` is protected: CI must be green and force-pushes are blocked.
+- Every change goes through a PR. Branches are deleted on merge.
+- Conventional commits (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`, `docs:`).
+- Tag releases as `vMAJOR.MINOR.PATCH`.
+- The Dependabot config in [.github/dependabot.yml](.github/dependabot.yml) opens grouped weekly bumps; only minor / patch dependencies are accepted blindly — major bumps (e.g., Spring Boot 4) get reviewed and merged as their own slice.
 
 ## License
 

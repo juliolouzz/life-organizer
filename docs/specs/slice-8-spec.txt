@@ -1,0 +1,168 @@
+================================================================================
+LIFE ORGANIZER - SLICE 8 SPECIFICATION
+================================================================================
+Project       : Life Organizer
+Slice         : 8 - Auth completeness (password reset + email verification + rate limiting)
+Status        : APPROVED - building this slice
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1. WHY
+--------------------------------------------------------------------------------
+
+The auth system from Slice 1 has three real-world gaps that would block sharing
+the app with anyone else:
+
+  1. Forget your password and you're locked out forever (no reset flow)
+  2. Anyone can register with "typo@gmial.com" - no proof of email ownership
+  3. A script could brute-force the login endpoint a million times unchecked
+
+Slice 8 closes all three without bringing in external services (no SMTP, no
+Redis, no third-party rate limit provider). Email "delivery" is logged to the
+backend so a self-hosting user can grab the link from logs; production
+deployment would later wire an SMTP provider in this slot.
+
+
+--------------------------------------------------------------------------------
+2. DECISIONS LEDGER (LOCKED)
+--------------------------------------------------------------------------------
+
+#   Decision
+--- ----------------------------------------------------------------------------
+1   Reset and verification tokens are stateless signed JWTs (HS256), same key
+    as access/refresh tokens. typ claim distinguishes "password_reset" and
+    "verify_email" from "access" / "refresh".
+2   Password reset token TTL: 1 hour. Email verification token TTL: 24 hours.
+3   POST /auth/forgot-password always returns 200 with the same body,
+    regardless of whether the email exists. Prevents user enumeration.
+4   POST /auth/reset-password takes { token, newPassword } and returns 200
+    on success. The newPassword goes through the same validators as register.
+5   Email verification is NON-BLOCKING: the user can still log in and use the
+    app while their email is unverified. A banner on the dashboard prompts
+    them to verify. /me returns an emailVerified flag.
+6   Email sending is NOT implemented in Slice 8. The verify and reset links
+    are written to the backend log (INFO level) for the self-hosted owner
+    to copy. A future operational slice will plug in SMTP.
+7   Rate limiting: in-memory sliding window per (IP, endpoint). Applied to:
+      POST /auth/login
+      POST /auth/register
+      POST /auth/forgot-password
+    Limit: 5 successful requests per 15 minutes per IP per endpoint.
+    Limit exceeded -> 429 with envelope { code: "RATE_LIMITED" }.
+8   Rate limiter is single-instance only. Distributed limiting is deferred to
+    a future hosting slice.
+9   Database change: add users.email_verified BOOLEAN NOT NULL DEFAULT FALSE.
+    Existing users are backfilled as verified=true (they registered before
+    verification was required - grandfathered).
+10  Verification + reset tokens are NOT stored in the DB. Once issued, they
+    work until they expire or a new password is set. After a successful
+    password reset, no automatic invalidation of other tokens (deferred -
+    proper logout-everywhere is a Slice 10+ feature).
+
+
+--------------------------------------------------------------------------------
+3. NEW ENDPOINTS
+--------------------------------------------------------------------------------
+
+POST /api/v1/auth/forgot-password
+Body:   { "email": "..." }
+Always: 200 OK
+Body:   { "success": true, "data": null, "message": "If that email is registered, a reset link has been sent.", "meta": null }
+
+POST /api/v1/auth/reset-password
+Body:   { "token": "...", "newPassword": "..." }
+200 OK on success
+401 INVALID_TOKEN on bad / wrong-typ / expired token
+401 USER_NOT_FOUND if token references a deleted user
+400 validation map for password failing policy
+
+POST /api/v1/auth/verify-email
+Body:   { "token": "..." }
+200 OK on success - user is marked verified
+401 INVALID_TOKEN on bad / wrong-typ / expired token
+
+GET /api/v1/me
+Now also returns an "emailVerified" boolean field.
+
+
+--------------------------------------------------------------------------------
+4. FRONTEND CHANGES
+--------------------------------------------------------------------------------
+
+4.1 Login page
+- New link below the password field: "Forgot password?" routes to /forgot-password
+
+4.2 /forgot-password page (anonymous-only)
+- Centred card with email input + "Send reset link" button
+- After submit: shows confirmation card "If your email is registered, you'll
+  receive a link. Check your inbox (or backend logs in self-hosted setups)."
+- Has a "Back to login" link
+
+4.3 /reset-password?token=... page (anonymous-only)
+- Reads token from query string
+- New-password input + confirm input + password strength meter (reuses Register's)
+- Submits POST /auth/reset-password
+- On success: snackbar "Password updated", navigate to /login
+- On invalid/expired token: form-level error with "Request a new link" CTA
+
+4.4 /verify-email?token=... page (anonymous-only)
+- Reads token from query string and calls POST /auth/verify-email immediately
+- Shows "Email verified" success card OR "Token invalid or expired" error card
+- "Continue to dashboard" button
+
+4.5 Dashboard banner
+- Above the page header, shown only when /me returns emailVerified=false
+- "Verify your email" with a "Resend link" button
+- Resend calls a new POST /auth/resend-verification endpoint
+  - Returns 200 always (same anti-enumeration pattern)
+- Dismissable per session
+
+
+--------------------------------------------------------------------------------
+5. ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+
+AC-8-1   POST /auth/forgot-password returns 200 even when the email is unknown.
+         Successful + unknown bodies are byte-identical.
+AC-8-2   POST /auth/reset-password with a valid token sets the new password;
+         a subsequent login with the old password returns 401.
+AC-8-3   POST /auth/reset-password with an expired or tampered token returns
+         401 INVALID_TOKEN.
+AC-8-4   POST /auth/reset-password with a new password that fails policy
+         returns 400 with the field map.
+AC-8-5   New users have emailVerified=false. Existing migrated users are TRUE.
+AC-8-6   POST /auth/verify-email with a valid token sets emailVerified=true;
+         subsequent /me returns the new value.
+AC-8-7   POST /auth/verify-email with an expired or tampered token returns
+         401 INVALID_TOKEN.
+AC-8-8   5 failed POSTs to /auth/login from the same IP in 15 minutes -> the
+         6th returns 429 RATE_LIMITED.
+AC-8-9   The /auth/* rate limiter does not affect other endpoints.
+AC-8-10  Frontend "Forgot password?" link routes to /forgot-password.
+AC-8-11  /reset-password reads token from URL, validates locally for blank,
+         and surfaces server errors inline.
+AC-8-12  Dashboard banner only appears when the current user is unverified.
+AC-8-13  All new endpoints reject 401 without a Bearer token where the spec
+         calls for auth (which is none in this slice - all 4 new endpoints
+         are anonymous).
+
+
+--------------------------------------------------------------------------------
+6. OUT OF SCOPE (SLICE 8)
+--------------------------------------------------------------------------------
+
+* Real email sending (SMTP / SendGrid / SES) - deferred to operational slice
+* Distributed rate limiting across multiple backend replicas
+* Block login until email is verified (chose non-blocking; users want low
+  friction during initial setup)
+* Refresh-token invalidation on password reset / logout-everywhere
+* TOTP / WebAuthn / 2FA
+* Account recovery via security questions or backup codes
+* Throttling on the verify-email and reset-password endpoints themselves
+  (the token check is already cryptographic so brute force is not viable)
+
+
+================================================================================
+END OF SPEC - Slice 8
+================================================================================

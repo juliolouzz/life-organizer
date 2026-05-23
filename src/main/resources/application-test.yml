@@ -19,3 +19,8 @@ app:
     access-ttl: 15m
     refresh-ttl: 7d
     clock-skew: 30s
+  # Disabled by default in tests; the rate-limit-specific test re-enables it via
+  # @TestPropertySource. Other integration tests would otherwise poison each other
+  # since the limiter is a singleton across the test run.
+  rate-limit:
+    enabled: false

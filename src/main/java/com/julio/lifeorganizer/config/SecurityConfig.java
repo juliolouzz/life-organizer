@@ -3,6 +3,8 @@ package com.julio.lifeorganizer.config;
 import com.julio.lifeorganizer.auth.security.JwtAuthenticationEntryPoint;
 import com.julio.lifeorganizer.auth.security.JwtAuthenticationFilter;
 import com.julio.lifeorganizer.auth.service.JwtService;
+import com.julio.lifeorganizer.common.security.RateLimitFilter;
+import com.julio.lifeorganizer.common.security.RateLimiter;
 import java.time.Clock;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -14,6 +16,7 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -33,28 +36,51 @@ public class SecurityConfig {
     @Value("${app.cors.allowed-origins:}")
     private List<String> allowedOrigins;
 
+    // Disabled in the test profile (application-test.yml) so integration tests can
+    // register / login arbitrarily many times. Production default is enabled.
+    @Value("${app.rate-limit.enabled:true}")
+    private boolean rateLimitEnabled;
+
     @Bean
     public SecurityFilterChain filterChain(
             HttpSecurity http,
             JwtService jwtService,
             JwtAuthenticationEntryPoint entryPoint,
+            RateLimiter rateLimiter,
             @Qualifier("handlerExceptionResolver") HandlerExceptionResolver resolver) throws Exception {
 
         JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, resolver);
+        RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiter, resolver, rateLimitEnabled);
 
         http
-                .csrf(csrf -> csrf.disable())
+                // CSRF is intentionally disabled: this is a pure JSON API authenticated
+                // with stateless JWTs sent in the Authorization header. Browsers do not
+                // automatically attach Authorization headers to cross-site requests, so
+                // there is no ambient credential a third-party site could ride on - the
+                // precondition for CSRF. Cookies are not used for auth anywhere. If we
+                // ever switch to cookie-based sessions, re-enable CSRF protection.
+                .csrf(csrf -> csrf.disable()) // lgtm[java/spring-disabled-csrf-protection]
                 .cors(Customizer.withDefaults())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // no-referrer: prevents the Referer header from leaking URLs that carry
+                // sensitive query params (e.g. /reset-password?token=... and
+                // /verify-email?token=...) when the user clicks any outbound link.
+                .headers(h -> h.referrerPolicy(rp ->
+                        rp.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(entryPoint))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login",
-                                "/api/v1/auth/refresh").permitAll()
+                                "/api/v1/auth/refresh",
+                                "/api/v1/auth/forgot-password",
+                                "/api/v1/auth/reset-password",
+                                "/api/v1/auth/verify-email",
+                                "/api/v1/auth/resend-verification").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().authenticated())
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

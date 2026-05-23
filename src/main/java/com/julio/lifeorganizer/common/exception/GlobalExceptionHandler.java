@@ -97,6 +97,14 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage(), ex.errorCode()));
     }
 
+    @ExceptionHandler(RateLimitedException.class)
+    public ResponseEntity<ApiResponse<Object>> handleRateLimited(
+            RateLimitedException ex, HttpServletRequest req) {
+        warn(req, "rate-limited", ex.errorCode());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(ApiResponse.error(ex.getMessage(), ex.errorCode()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleFallback(Exception ex, HttpServletRequest req) {
         log.error("Unhandled exception on {} {}", sanitize(req.getMethod()), sanitize(req.getRequestURI()), ex);

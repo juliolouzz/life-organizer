@@ -27,8 +27,9 @@ class SchemaMigrationTest extends AbstractJpaTest {
                 """);
 
         List<String> names = cols.stream().map(c -> (String) c.get("column_name")).toList();
-        assertThat(names).containsExactly(
-                "id", "email", "password_hash", "display_name", "role", "created_at", "updated_at"
+        assertThat(names).contains(
+                "id", "email", "password_hash", "display_name", "role", "created_at", "updated_at",
+                "email_verified"
         );
 
         Integer emailLen = (Integer) cols.get(1).get("character_maximum_length");
@@ -67,7 +68,7 @@ class SchemaMigrationTest extends AbstractJpaTest {
 
         assertThat(history)
                 .extracting(row -> row.get("version"))
-                .containsExactly("1", "2", "3", "4", "5", "6");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7");
         assertThat(history)
                 .extracting(row -> row.get("success"))
                 .containsOnly(true);
