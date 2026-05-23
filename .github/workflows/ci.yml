@@ -11,8 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-verify:
-    name: mvn verify (JDK 21, Postgres via Testcontainers)
+  backend:
+    name: backend - mvn verify (JDK 21, Postgres via Testcontainers)
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -32,9 +32,7 @@ jobs:
 
       - name: Run mvn verify
         env:
-          # Testcontainers performance: reuse container across test classes if supported.
           TESTCONTAINERS_REUSE_ENABLE: 'true'
-          # Required by JwtProperties validation at boot. CI-only - never used in prod.
           JWT_SECRET: 'ci-only-jwt-secret-must-be-at-least-32-characters-long-padding'
         run: mvn -B -ntp verify
 
@@ -46,12 +44,51 @@ jobs:
           path: target/site/jacoco/
           retention-days: 7
 
-      - name: Upload test reports on failure
+      - name: Upload backend test reports on failure
         if: failure()
         uses: actions/upload-artifact@v5
         with:
-          name: test-reports
+          name: backend-test-reports
           path: |
             target/surefire-reports/
             target/failsafe-reports/
           retention-days: 14
+
+  frontend:
+    name: frontend - build, lint, jest (Node 20, Angular 17)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests (Jest)
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Upload built bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 7

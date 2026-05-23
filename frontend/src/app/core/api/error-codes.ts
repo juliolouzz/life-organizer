@@ -1,0 +1,15 @@
+/** Canonical error codes emitted by the backend in ApiResponse.meta.code. */
+export const ErrorCode = {
+  USER_EMAIL_EXISTS: 'USER_EMAIL_EXISTS',
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  INVALID_TOKEN: 'INVALID_TOKEN',
+  TOKEN_EXPIRED: 'TOKEN_EXPIRED',
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  USER_NOT_FOUND: 'USER_NOT_FOUND',
+  INVALID_QUERY: 'INVALID_QUERY',
+  MALFORMED_REQUEST: 'MALFORMED_REQUEST',
+  TRANSACTION_NOT_FOUND: 'TRANSACTION_NOT_FOUND',
+  INTERNAL_ERROR: 'INTERNAL_ERROR'
+} as const;
+
+export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
