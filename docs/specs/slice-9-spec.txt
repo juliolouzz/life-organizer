@@ -1,0 +1,327 @@
+================================================================================
+LIFE ORGANIZER - SLICE 9 SPECIFICATION
+================================================================================
+Project       : Life Organizer
+Slice         : 9 - Account management (display name, password, email, delete)
+Status        : APPROVED - building this slice
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1. WHY
+--------------------------------------------------------------------------------
+
+Slice 8 made auth complete from the outside (reset, verify, throttle). Slice 9
+makes it complete from the inside: a logged-in user can finally manage their
+own account without operator intervention.
+
+Three real-world gaps in the current API:
+
+  1. There is no way to change your password except via the reset-link flow.
+     That works, but it sends a single-use link to your inbox even though
+     you are sitting in the app already authenticated. Awkward.
+  2. There is no way to change the email on file. If your primary inbox dies
+     or your domain expires, the account becomes inaccessible.
+  3. There is no way to delete your account. The DB grows forever and the
+     project cannot honor a deletion request.
+
+Slice 9 closes these three. Display-name editing is included as a fourth,
+low-risk feature in the same "/me" surface since it is trivial once the
+endpoints are there.
+
+
+--------------------------------------------------------------------------------
+2. DECISIONS LEDGER (LOCKED)
+--------------------------------------------------------------------------------
+
+#   Decision
+--- ----------------------------------------------------------------------------
+1   All four operations sit under PATCH or POST /api/v1/me/* and require a
+    valid access token. The user can only modify their OWN account - the
+    user id always comes from the JWT subject, never the request body.
+
+2   Password change: POST /api/v1/me/password
+    Body: { currentPassword, newPassword }
+    Verifies currentPassword via bcrypt match. The new password goes through
+    the same validators as register / reset (>=8 chars, letter+digit).
+    Rejects 400 INVALID_CREDENTIALS if currentPassword does not match.
+
+3   Display-name change: PATCH /api/v1/me with { displayName }
+    No password confirmation - this is low risk. Validators match register:
+    2..100 chars, non-blank.
+
+4   Email change: TYPO-SAFE, two-step.
+    Step 1: POST /api/v1/me/email { newEmail, currentPassword }
+            - verifies currentPassword
+            - rejects 409 USER_EMAIL_EXISTS if newEmail is already taken
+            - issues a stateless JWT (typ="change_email", sub=userId,
+              new_email=newEmail, pwdv=fingerprint(passwordHash), ttl=24h)
+            - writes the verify link to the dev-delivery sink (same channel
+              as reset / verify)
+            - returns 200 with an envelope message "Verification sent"
+            - the user.email column is NOT touched - the OLD email keeps
+              working as the login until the new one is verified
+    Step 2: POST /api/v1/auth/confirm-email-change { token }
+            - parses the JWT (signature, typ, expiry, pwdv binding)
+            - rejects 409 USER_EMAIL_EXISTS if newEmail was claimed by
+              another user between request and confirm
+            - sets users.email = newEmail
+            - returns the updated UserResponse
+    This endpoint is anonymous so the link works without a fresh login.
+
+5   Account deletion: SOFT delete with a 30-day grace period.
+    POST /api/v1/me/delete { password }
+            - verifies password
+            - sets users.deletion_scheduled_at = now + 30 days
+            - issues an account_restore JWT (typ="account_restore",
+              sub=userId, pwdv=..., ttl=30 days) and writes the restore
+              link to the dev-delivery sink
+            - returns 200 with { deletionScheduledAt }
+    From this point on:
+            - login returns 403 ACCOUNT_DELETION_PENDING with the date
+            - any access token that still has time on it is rejected by the
+              JwtAuthenticationFilter (which now also looks up the user and
+              checks deletion_scheduled_at)
+            - /api/v1/auth/confirm-account-restore { token } reactivates
+              the account (clears deletion_scheduled_at) and returns 200
+            - the restore endpoint is anonymous
+
+6   Hard delete: a Spring @Scheduled job runs daily at 03:00 UTC.
+    For each user with deletion_scheduled_at <= now:
+            - deletes recurring_rules where user_id = u.id
+            - deletes budgets where user_id = u.id
+            - deletes transactions where user_id = u.id
+            - deletes categories where user_id = u.id
+            - deletes the user row
+    Done in a single @Transactional method. CASCADE constraints could do
+    the same work but explicit DELETEs are easier to audit in logs.
+
+7   Database migration V8:
+    - ALTER TABLE users ADD COLUMN deletion_scheduled_at TIMESTAMPTZ NULL.
+    - No new tables (email change uses a stateless JWT, no pending_email
+      column needed).
+    - Index: CREATE INDEX idx_users_deletion_scheduled
+      ON users(deletion_scheduled_at) WHERE deletion_scheduled_at IS NOT NULL.
+
+8   Rate limiting: /me/email and /me/delete are added to RateLimitFilter
+    (5 req per 15 min per IP). The other /me/* endpoints are not throttled
+    because they require a valid access token, which is itself rate-limited
+    indirectly by login throttling.
+
+9   No notification to the OLD email about an email-change request. Best
+    practice would notify, but we have no SMTP. Once SMTP lands in the
+    operational slice, an "old-email" notification is a one-line addition.
+
+10  Tokens are NOT bound to a nonce / refresh-token-version. As in Slice 8
+    accepted that risk: a leaked change_email or account_restore token is
+    valid until it expires. The 24h / 30d TTLs are the only mitigation.
+
+
+--------------------------------------------------------------------------------
+3. NEW ENDPOINTS
+--------------------------------------------------------------------------------
+
+PATCH /api/v1/me                        (auth required)
+Body:    { "displayName": "..." }
+200 OK: full UserResponse
+400 validation map on bad input
+
+POST /api/v1/me/password                (auth required)
+Body:    { "currentPassword": "...", "newPassword": "..." }
+200 OK: { "message": "Password updated" }
+400 INVALID_CREDENTIALS if currentPassword does not match
+400 validation map if newPassword fails policy
+
+POST /api/v1/me/email                   (auth required)
+Body:    { "newEmail": "...", "currentPassword": "..." }
+200 OK: { "message": "Verification sent to {newEmail}" }
+400 INVALID_CREDENTIALS if currentPassword does not match
+409 USER_EMAIL_EXISTS if newEmail is taken
+400 validation map if newEmail fails format
+
+POST /api/v1/auth/confirm-email-change  (anonymous)
+Body:    { "token": "..." }
+200 OK: updated UserResponse
+401 INVALID_TOKEN on bad / wrong-typ / expired / pwdv-mismatched token
+409 USER_EMAIL_EXISTS if the email was claimed during the verify window
+
+POST /api/v1/me/delete                  (auth required)
+Body:    { "password": "..." }
+200 OK: { "deletionScheduledAt": "2026-06-22T10:00:00Z" }
+400 INVALID_CREDENTIALS if password does not match
+409 ACCOUNT_DELETION_PENDING if already scheduled
+
+POST /api/v1/auth/confirm-account-restore (anonymous)
+Body:    { "token": "..." }
+200 OK: updated UserResponse (deletionScheduledAt is now null)
+401 INVALID_TOKEN on bad / expired / pwdv-mismatched token
+409 ACCOUNT_NOT_DELETING if the account was never scheduled or already past
+    its deletion date
+
+GET /api/v1/me                          (auth required, EXISTING - extended)
+Now also returns "deletionScheduledAt" (null when not scheduled).
+
+
+--------------------------------------------------------------------------------
+4. CHANGES TO EXISTING BEHAVIOUR
+--------------------------------------------------------------------------------
+
+4.1 Login (/api/v1/auth/login)
+    If the matched user has deletion_scheduled_at IS NOT NULL and that
+    timestamp is in the future, return 403 ACCOUNT_DELETION_PENDING with
+    the date in the envelope meta. Body shape:
+       { code: "ACCOUNT_DELETION_PENDING",
+         deletionScheduledAt: "..." }
+
+4.2 JwtAuthenticationFilter
+    After parsing the access token and loading the user, reject the
+    request with 401 ACCOUNT_DELETION_PENDING if deletion_scheduled_at
+    is set and in the future. This catches sessions that started before
+    deletion and the access token has not yet expired.
+
+4.3 UserResponse
+    Add deletionScheduledAt (nullable). Used by the dashboard to render a
+    "Your account will be deleted on X" banner with a "Cancel deletion"
+    action that calls the restore endpoint with no token (auth required,
+    self-only).
+
+    NOTE: there are TWO restore paths:
+       - /api/v1/me/restore       (auth required, no token) - cancels
+                                  while still inside the grace period AND
+                                  while the access token still works
+       - /api/v1/auth/confirm-account-restore (anonymous, with token) -
+                                  for the case where login is already
+                                  blocked, only the email link works
+
+
+--------------------------------------------------------------------------------
+5. FRONTEND CHANGES
+--------------------------------------------------------------------------------
+
+5.1 New /account page (auth-only, accessible from the sidebar / avatar menu)
+    Four sections, vertically stacked:
+
+    5.1.1 Profile
+          - Display name input (prefilled)
+          - "Save changes" button -> PATCH /me
+
+    5.1.2 Password
+          - Three inputs: current password, new password, confirm new password
+          - "Update password" button -> POST /me/password
+          - Server errors mapped: INVALID_CREDENTIALS on currentPassword,
+            password-policy errors on newPassword
+
+    5.1.3 Email
+          - Read-only display of current email
+          - "Change email" expands a sub-form: new email + current password
+          - On submit: POST /me/email; show success card "Verification sent"
+          - If the user has a pending change, no separate UI - just the
+            success card stays until they navigate away
+
+    5.1.4 Delete account
+          - Danger-style card at the bottom
+          - "Delete my account" button opens a confirmation dialog
+          - Dialog requires re-typing the user's email AND password
+          - On submit: POST /me/delete; navigate to a /deletion-pending page
+
+5.2 New /confirm-email-change?token=... page (anonymous)
+    Reads token from query string, calls POST /auth/confirm-email-change.
+    Same UX as /verify-email (three states: verifying / success / error).
+    Strips token from URL on read.
+
+5.3 New /restore-account?token=... page (anonymous)
+    Same shape as 5.2. Strips token from URL on read.
+
+5.4 New /deletion-pending page (anonymous-accessible)
+    Shown after a delete request. "Your account is scheduled for deletion
+    on X. We sent a restore link to {email}. Use it within 30 days to keep
+    your account."
+
+5.5 Dashboard banner (extension of S8 banner)
+    If the user has deletionScheduledAt set:
+       - banner "Your account will be deleted on X. Cancel deletion."
+       - "Cancel deletion" button -> POST /me/restore (auth path)
+
+5.6 Login page
+    If the API returns 403 ACCOUNT_DELETION_PENDING, show:
+       "Your account is scheduled for deletion on X. Check your email for
+        the restore link, or contact support."
+    The page does NOT silently accept the login as success.
+
+
+--------------------------------------------------------------------------------
+6. ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+
+AC-9-1   PATCH /me with a new displayName updates the column and returns
+         the updated UserResponse.
+AC-9-2   PATCH /me does NOT accept email or password fields (any such
+         payload is rejected as 400 - the user must use the dedicated
+         endpoints).
+AC-9-3   POST /me/password with the correct currentPassword and a valid
+         newPassword updates the hash; old password is rejected on
+         subsequent login.
+AC-9-4   POST /me/password with wrong currentPassword returns 400
+         INVALID_CREDENTIALS without touching the hash.
+AC-9-5   POST /me/email with valid currentPassword and a free email returns
+         200 and writes a link to the dev-delivery sink. users.email is NOT
+         changed yet.
+AC-9-6   POST /me/email with currentPassword wrong returns 400
+         INVALID_CREDENTIALS.
+AC-9-7   POST /me/email with newEmail already taken returns 409
+         USER_EMAIL_EXISTS.
+AC-9-8   POST /auth/confirm-email-change with a valid token updates
+         users.email to the value embedded in the token, and a subsequent
+         /me reflects it.
+AC-9-9   The change_email token contains the password fingerprint at issue
+         time. If the user resets their password between issue and confirm,
+         the confirm returns 401 INVALID_TOKEN.
+AC-9-10  POST /me/delete with the correct password sets
+         deletion_scheduled_at = now + 30 days and writes a restore link
+         to the dev-delivery sink.
+AC-9-11  After /me/delete: any subsequent login returns 403
+         ACCOUNT_DELETION_PENDING with the scheduled date in meta.
+AC-9-12  After /me/delete: any subsequent request with an existing
+         (un-expired) access token returns 401 ACCOUNT_DELETION_PENDING.
+AC-9-13  POST /me/restore (auth path) with deletion_scheduled_at set and
+         in the future clears it and returns 200. Login works normally
+         afterwards.
+AC-9-14  POST /auth/confirm-account-restore with a valid token clears
+         deletion_scheduled_at and returns 200.
+AC-9-15  POST /auth/confirm-account-restore with a valid token but on an
+         account that was already restored (deletion_scheduled_at = NULL)
+         returns 409 ACCOUNT_NOT_DELETING.
+AC-9-16  The hard-delete @Scheduled job, when invoked manually with
+         deletion_scheduled_at set to a past timestamp, deletes the user
+         row AND every transaction / category / budget / recurring rule
+         owned by that user.
+AC-9-17  The hard-delete job does NOT touch users whose
+         deletion_scheduled_at is in the future or NULL.
+AC-9-18  /me/email and /me/delete are rate-limited at the same window as
+         the public auth endpoints (AC-8-8 style).
+AC-9-19  Frontend /account page submits each section independently and
+         shows server errors inline (no global error banner pollution).
+AC-9-20  Frontend dashboard shows the "account scheduled for deletion"
+         banner when deletionScheduledAt is set, with a working cancel
+         action that calls /me/restore.
+
+
+--------------------------------------------------------------------------------
+7. OUT OF SCOPE (SLICE 9)
+--------------------------------------------------------------------------------
+
+* Real email sending to the OLD email on email-change (deferred to ops slice
+  with SMTP)
+* Logout-all-sessions on password or email change (needs refresh-token
+  versioning - Slice 10 candidate)
+* GDPR-style data export ("download my data")
+* Multi-factor confirmation on sensitive actions (TOTP / WebAuthn)
+* Admin-side account management (an admin endpoint to suspend / delete
+  someone else's account)
+* Account merge / transfer
+* User-visible audit log of account events ("you changed your password on X")
+
+
+================================================================================
+END OF SPEC - Slice 9
+================================================================================
