@@ -218,11 +218,11 @@ public class CsvImportService {
         int lastComma = s.lastIndexOf(',');
         int decimalAt = Math.max(lastDot, lastComma);
         if (decimalAt < 0) return s; // no separators at all
-        char decimalChar = s.charAt(decimalAt);
         // Replace all other separators (the thousand ones) with nothing.
         String left = s.substring(0, decimalAt).replace(".", "").replace(",", "");
         String right = s.substring(decimalAt + 1);
-        // If decimal char was a comma, write back as a dot for BigDecimal.
+        // Whatever the original decimal char was (',' for BR locale, '.' for EN),
+        // always emit a '.' so BigDecimal can parse it.
         return left + "." + right;
     }
 

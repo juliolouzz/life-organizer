@@ -21,11 +21,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(RateLimitFilter.class);
 
-    // Endpoints under rate limit. Slice 8 covers the public-write auth surface only.
+    // Endpoints under rate limit. Slice 8 covers the entire public-write auth surface:
+    // both the "request a token" endpoints (login/register/forgot-password/resend) and
+    // the "consume a token" endpoints (reset-password/verify-email). Limiting the
+    // consume endpoints is defense in depth against brute-forcing the HS256 signature
+    // and against DoS via repeated bcrypt work.
     private static final Set<String> LIMITED_PATHS = Set.of(
             "/api/v1/auth/login",
             "/api/v1/auth/register",
-            "/api/v1/auth/forgot-password");
+            "/api/v1/auth/forgot-password",
+            "/api/v1/auth/reset-password",
+            "/api/v1/auth/verify-email",
+            "/api/v1/auth/resend-verification");
 
     private final RateLimiter limiter;
     private final HandlerExceptionResolver resolver;

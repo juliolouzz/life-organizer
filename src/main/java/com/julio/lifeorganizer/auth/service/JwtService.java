@@ -9,6 +9,8 @@ import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -29,6 +31,9 @@ public class JwtService {
     public static final String TYP_VERIFY_EMAIL = "verify_email";
     public static final String EMAIL_CLAIM = "email";
     public static final String ROLE_CLAIM = "role";
+    // Short fingerprint of the user's current password hash. Embedded in
+    // password-reset tokens so they auto-invalidate after the password is changed.
+    public static final String PWDV_CLAIM = "pwdv";
 
     // Slice 8 token TTLs (decision 2).
     private static final Duration PASSWORD_RESET_TTL = Duration.ofHours(1);
@@ -80,21 +85,41 @@ public class JwtService {
         return claims;
     }
 
-    public String generatePasswordResetToken(Long userId) {
+    public String generatePasswordResetToken(Long userId, String passwordHash) {
         Instant now = clock.instant();
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim(TYP_CLAIM, TYP_PASSWORD_RESET)
+                .claim(PWDV_CLAIM, passwordFingerprint(passwordHash))
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(PASSWORD_RESET_TTL)))
                 .signWith(signingKey, Jwts.SIG.HS256)
                 .compact();
     }
 
+    // Parses signature/typ/expiry only - does not check the password binding because
+    // doing so requires loading the user. Callers must call verifyPasswordBinding once
+    // they have the user's current password hash.
     public Claims parsePasswordResetToken(String token) {
         Claims claims = parse(token);
         requireTyp(claims, TYP_PASSWORD_RESET);
         return claims;
+    }
+
+    // Throws InvalidTokenException if the token's pwdv claim doesn't match a fingerprint
+    // of the current password hash. After a password change the fingerprint differs,
+    // so any previously-issued reset token is rejected (effectively single-use).
+    public void verifyPasswordBinding(Claims claims, String currentPasswordHash) {
+        Object pwdv = claims.get(PWDV_CLAIM);
+        if (!(pwdv instanceof String tokenFingerprint)) {
+            throw new InvalidTokenException("Token is missing password binding");
+        }
+        String currentFingerprint = passwordFingerprint(currentPasswordHash);
+        if (!MessageDigest.isEqual(
+                tokenFingerprint.getBytes(StandardCharsets.UTF_8),
+                currentFingerprint.getBytes(StandardCharsets.UTF_8))) {
+            throw new InvalidTokenException("Token does not match current credentials");
+        }
     }
 
     public String generateEmailVerificationToken(Long userId) {
@@ -134,6 +159,22 @@ public class JwtService {
         Object typ = claims.get(TYP_CLAIM);
         if (!expected.equals(typ)) {
             throw new InvalidTokenException("Token type mismatch");
+        }
+    }
+
+    // First 16 hex chars of SHA-256(passwordHash). 64 bits is far more entropy than we need
+    // to detect a password change, and short enough to keep the token compact.
+    private static String passwordFingerprint(String passwordHash) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(passwordHash.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(16);
+            for (int i = 0; i < 8; i++) {
+                sb.append(String.format("%02x", digest[i]));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 unavailable", ex);
         }
     }
 }

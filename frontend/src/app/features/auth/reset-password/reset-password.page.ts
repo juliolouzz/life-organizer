@@ -168,6 +168,15 @@ export class ResetPasswordPage implements OnInit {
   ngOnInit(): void {
     const t = this.route.snapshot.queryParamMap.get('token');
     this.token.set(t && t.trim().length > 0 ? t : null);
+    // Drop the token from the URL once we have it in memory. Keeping it there leaks
+    // the token into browser history, session restore, and any (mis)configured analytics.
+    if (t) {
+      this.router.navigate([], {
+        queryParams: { token: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true
+      });
+    }
   }
 
   protected toggleVisibility(): void { this.showPassword.update((v) => !v); }

@@ -3,7 +3,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { PasswordResetService } from '../../../core/auth/password-reset.service';
 
@@ -81,6 +81,7 @@ type ViewState = 'verifying' | 'success' | 'error' | 'no-token';
 export class VerifyEmailPage implements OnInit {
   private readonly api = inject(PasswordResetService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
 
   protected readonly state = signal<ViewState>('verifying');
 
@@ -90,6 +91,12 @@ export class VerifyEmailPage implements OnInit {
       this.state.set('no-token');
       return;
     }
+    // Drop the token from the URL immediately - it should not be left in browser history.
+    this.router.navigate([], {
+      queryParams: { token: null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
     this.api.verifyEmail(token).subscribe({
       next: () => this.state.set('success'),
       error: () => this.state.set('error')

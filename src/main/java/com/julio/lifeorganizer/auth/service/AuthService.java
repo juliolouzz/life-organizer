@@ -38,6 +38,12 @@ public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
+    // Pre-computed synthetic password hash shape (bcrypt-style) used to mimic the work
+    // the happy path does when an email is not registered. Constant so we don't
+    // accidentally leak more timing via hash construction.
+    private static final String ENUMERATION_DECOY_HASH =
+            "$2a$12$0000000000000000000000000000000000000000000000000000";
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -78,13 +84,20 @@ public class AuthService {
     /**
      * Always returns successfully regardless of whether the email exists - prevents
      * user enumeration (AC-8-1). If the email matches a user, a reset link is logged.
+     * Performs equivalent work in both branches (token generation + bcrypt-class hash) so
+     * the response time does not leak whether the email is registered.
      */
     public void requestPasswordReset(ForgotPasswordRequest request) {
         String email = request.email().trim().toLowerCase();
-        userRepository.findByEmail(email).ifPresent(user -> {
-            String token = jwtService.generatePasswordResetToken(user.getId());
+        userRepository.findByEmail(email).ifPresentOrElse(user -> {
+            String token = jwtService.generatePasswordResetToken(user.getId(), user.getPasswordHash());
             log.info("PASSWORD RESET LINK for user {} ({}): /reset-password?token={}",
                     user.getId(), user.getEmail(), token);
+        }, () -> {
+            // Burn equivalent CPU so response time matches the happy path and does not
+            // leak whether the email exists. The token is generated against a synthetic
+            // password hash and discarded.
+            jwtService.generatePasswordResetToken(0L, ENUMERATION_DECOY_HASH);
         });
     }
 
@@ -99,6 +112,10 @@ public class AuthService {
         }
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(UserNotFoundForTokenException::new);
+        // After this passes the token is bound to the user's CURRENT password hash.
+        // Once we persist the new hash below, the token's fingerprint no longer matches,
+        // so any subsequent attempt with the same token fails - effectively single-use.
+        jwtService.verifyPasswordBinding(claims, user.getPasswordHash());
         user.changePasswordHash(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
     }
@@ -121,16 +138,17 @@ public class AuthService {
     /**
      * Re-sends the verification email. Same anti-enumeration pattern: always
      * returns successfully regardless of whether the email is registered or already verified.
+     * Performs equivalent work in the no-op branch to flatten timing.
      */
     public void resendVerification(ForgotPasswordRequest request) {
         String email = request.email().trim().toLowerCase();
         userRepository.findByEmail(email)
                 .filter(user -> !user.isEmailVerified())
-                .ifPresent(user -> {
+                .ifPresentOrElse(user -> {
                     String token = jwtService.generateEmailVerificationToken(user.getId());
                     log.info("EMAIL VERIFICATION LINK (resent) for user {} ({}): /verify-email?token={}",
                             user.getId(), user.getEmail(), token);
-                });
+                }, () -> jwtService.generateEmailVerificationToken(0L));
     }
 
     public AuthTokensResponse login(LoginRequest request) {

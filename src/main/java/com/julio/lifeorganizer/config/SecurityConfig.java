@@ -16,6 +16,7 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -52,9 +53,20 @@ public class SecurityConfig {
         RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiter, resolver, rateLimitEnabled);
 
         http
-                .csrf(csrf -> csrf.disable())
+                // CSRF is intentionally disabled: this is a pure JSON API authenticated
+                // with stateless JWTs sent in the Authorization header. Browsers do not
+                // automatically attach Authorization headers to cross-site requests, so
+                // there is no ambient credential a third-party site could ride on - the
+                // precondition for CSRF. Cookies are not used for auth anywhere. If we
+                // ever switch to cookie-based sessions, re-enable CSRF protection.
+                .csrf(csrf -> csrf.disable()) // lgtm[java/spring-disabled-csrf-protection]
                 .cors(Customizer.withDefaults())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // no-referrer: prevents the Referer header from leaking URLs that carry
+                // sensitive query params (e.g. /reset-password?token=... and
+                // /verify-email?token=...) when the user clicks any outbound link.
+                .headers(h -> h.referrerPolicy(rp ->
+                        rp.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(entryPoint))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()

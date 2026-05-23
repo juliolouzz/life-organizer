@@ -3,6 +3,7 @@ package com.julio.lifeorganizer.auth;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.julio.lifeorganizer.AbstractIntegrationTest;
+import com.julio.lifeorganizer.auth.persistence.UserRepository;
 import com.julio.lifeorganizer.auth.service.JwtService;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -34,6 +35,7 @@ class AuthCompletenessIntegrationTest extends AbstractIntegrationTest {
     @Autowired private TestRestTemplate http;
     @Autowired private ObjectMapper json;
     @Autowired private JwtService jwtService;
+    @Autowired private UserRepository userRepository;
     @LocalServerPort private int port;
 
     private String email;
@@ -68,13 +70,9 @@ class AuthCompletenessIntegrationTest extends AbstractIntegrationTest {
     @Test
     void resetPassword_validToken_changesPassword_oldPasswordRejected() throws Exception {
         // Find the user's id from /me
-        long userId = json.readTree(http.exchange("/api/v1/me",
-                        HttpMethod.GET,
-                        new HttpEntity<>(authHeaders(accessToken)),
-                        String.class).getBody())
-                .get("data").get("id").asLong();
+        long userId = userIdOfCurrentUser();
 
-        String token = jwtService.generatePasswordResetToken(userId);
+        String token = jwtService.generatePasswordResetToken(userId, passwordHashFor(userId));
         ResponseEntity<String> reset = http.postForEntity("/api/v1/auth/reset-password",
                 Map.of("token", token, "newPassword", "NewPass123"), String.class);
         assertThat(reset.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -92,6 +90,26 @@ class AuthCompletenessIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void resetPassword_tokenCannotBeReusedAfterPasswordChange() throws Exception {
+        long userId = userIdOfCurrentUser();
+        String token = jwtService.generatePasswordResetToken(userId, passwordHashFor(userId));
+
+        // First use - succeeds.
+        ResponseEntity<String> first = http.postForEntity("/api/v1/auth/reset-password",
+                Map.of("token", token, "newPassword", "FirstNew123"), String.class);
+        assertThat(first.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        // Second use of the SAME token - the password binding no longer matches
+        // because the password (and therefore its fingerprint) has changed.
+        HttpClient client = HttpClient.newHttpClient();
+        HttpResponse<String> second = postJson(client, "/api/v1/auth/reset-password",
+                Map.of("token", token, "newPassword", "AnotherTry123"));
+        assertThat(second.statusCode()).isEqualTo(401);
+        assertThat(json.readTree(second.body()).get("meta").get("code").asText())
+                .isEqualTo("INVALID_TOKEN");
+    }
+
+    @Test
     void resetPassword_invalidToken_returns401() throws Exception {
         HttpClient client = HttpClient.newHttpClient();
         HttpResponse<String> resp = postJson(client, "/api/v1/auth/reset-password",
@@ -103,12 +121,8 @@ class AuthCompletenessIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void resetPassword_weakNewPassword_returns400() throws Exception {
-        long userId = json.readTree(http.exchange("/api/v1/me",
-                        HttpMethod.GET,
-                        new HttpEntity<>(authHeaders(accessToken)),
-                        String.class).getBody())
-                .get("data").get("id").asLong();
-        String token = jwtService.generatePasswordResetToken(userId);
+        long userId = userIdOfCurrentUser();
+        String token = jwtService.generatePasswordResetToken(userId, passwordHashFor(userId));
 
         ResponseEntity<String> resp = http.postForEntity("/api/v1/auth/reset-password",
                 Map.of("token", token, "newPassword", "weak"),
@@ -162,6 +176,18 @@ class AuthCompletenessIntegrationTest extends AbstractIntegrationTest {
     }
 
     // helpers
+
+    private long userIdOfCurrentUser() throws Exception {
+        return json.readTree(http.exchange("/api/v1/me",
+                        HttpMethod.GET,
+                        new HttpEntity<>(authHeaders(accessToken)),
+                        String.class).getBody())
+                .get("data").get("id").asLong();
+    }
+
+    private String passwordHashFor(long userId) {
+        return userRepository.findById(userId).orElseThrow().getPasswordHash();
+    }
 
     private HttpHeaders authHeaders(String token) {
         HttpHeaders h = new HttpHeaders();
