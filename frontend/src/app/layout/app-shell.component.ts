@@ -88,6 +88,15 @@ import { ThemeService } from '../core/theme/theme.service';
           </a>
           <a
             mat-list-item
+            routerLink="/reports"
+            routerLinkActive="active"
+            class="nav-item"
+          >
+            <span class="material-symbols-outlined nav-icon">analytics</span>
+            Reports
+          </a>
+          <a
+            mat-list-item
             routerLink="/profile"
             routerLinkActive="active"
             class="nav-item"

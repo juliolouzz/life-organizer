@@ -108,6 +108,11 @@ export const APP_ROUTES: Routes = [
           import('./features/recurring/recurring.page').then((m) => m.RecurringPage)
       },
       {
+        path: 'reports',
+        loadComponent: () =>
+          import('./features/reports/reports.page').then((m) => m.ReportsPage)
+      },
+      {
         path: 'profile',
         loadComponent: () =>
           import('./features/profile/profile.page').then((m) => m.ProfilePage)
