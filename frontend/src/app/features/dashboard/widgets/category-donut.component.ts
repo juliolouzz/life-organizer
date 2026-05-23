@@ -12,9 +12,10 @@ import { MatCardModule } from '@angular/material/card';
 import { NgChartsModule } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
 
-import { CategoryTotal } from '../insights.service';
-import { MoneyBrlPipe } from '../../../shared/pipes/money-brl.pipe';
+import { AuthService } from '../../../core/auth/auth.service';
 import { ThemeService } from '../../../core/theme/theme.service';
+import { MoneyBrlPipe } from '../../../shared/pipes/money-brl.pipe';
+import { CategoryTotal } from '../insights.service';
 
 const TOP_N = 8;
 
@@ -149,6 +150,7 @@ export class CategoryDonutComponent implements OnChanges {
   @Input() categories: CategoryTotal[] = [];
 
   private readonly theme = inject(ThemeService);
+  private readonly auth = inject(AuthService);
   private readonly tick = signal(0);
 
   protected readonly TOP_N = TOP_N;
@@ -207,10 +209,10 @@ export class CategoryDonutComponent implements OnChanges {
           padding: 10,
           callbacks: {
             label: (ctx) =>
-              `${ctx.label}: R$ ${Number(ctx.parsed).toLocaleString('pt-BR', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-              })}`
+              `${ctx.label}: ${this.auth.currencySymbol()} ${Number(ctx.parsed).toLocaleString(
+                this.auth.currencyLocale(),
+                { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+              )}`
           }
         }
       }

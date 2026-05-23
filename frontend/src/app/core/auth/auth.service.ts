@@ -53,6 +53,30 @@ export class AuthService {
   readonly currentUser = this.currentUserSig.asReadonly();
   readonly isAuthenticated = computed(() => this.accessTokenSig() !== null);
 
+  /**
+   * Slice 13: the symbol for the signed-in user's preferred currency.
+   * Falls back to R$ for anonymous renders. Bound by every chart, form
+   * prefix, and pipe so a currency change in /profile propagates without
+   * a reload.
+   */
+  readonly currencySymbol = computed(() => {
+    const c = this.currentUserSig()?.currency ?? 'BRL';
+    switch (c) {
+      case 'BRL': return 'R$';
+      case 'USD': return '$';
+      case 'EUR': return '€';
+    }
+  });
+
+  /**
+   * Slice 13: the locale used to format numeric values. BRL uses
+   * pt-BR conventions (1.234,56); USD and EUR use en-US (1,234.56).
+   */
+  readonly currencyLocale = computed(() => {
+    const c = this.currentUserSig()?.currency ?? 'BRL';
+    return c === 'BRL' ? 'pt-BR' : 'en-US';
+  });
+
   hasRefreshToken(): boolean {
     return this.refreshTokenSig() !== null;
   }

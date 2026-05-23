@@ -17,6 +17,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
 import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state.component';
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
 import { MoneyBrlPipe } from '../../shared/pipes/money-brl.pipe';
+import { AuthService } from '../../core/auth/auth.service';
 import { Category, CategoriesService } from '../categories/categories.service';
 import { Recurring, RecurringService } from './recurring.service';
 
@@ -72,7 +73,7 @@ function toIso(d: Date): string {
 
         <mat-form-field appearance="outline">
           <mat-label>Amount</mat-label>
-          <span matTextPrefix>R$&nbsp;</span>
+          <span matTextPrefix>{{ currencySymbol() }}&nbsp;</span>
           <input matInput type="number" step="0.01" min="0.01" formControlName="amount" required />
         </mat-form-field>
 
@@ -214,6 +215,9 @@ export class RecurringPage implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly snackBar = inject(MatSnackBar);
   private readonly dialog = inject(MatDialog);
+  private readonly auth = inject(AuthService);
+
+  protected readonly currencySymbol = this.auth.currencySymbol;
 
   protected readonly rows = signal<Recurring[]>([]);
   protected readonly categories = signal<Category[]>([]);

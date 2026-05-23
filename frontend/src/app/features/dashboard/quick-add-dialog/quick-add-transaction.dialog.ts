@@ -16,6 +16,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
+import { AuthService } from '../../../core/auth/auth.service';
 import { TransactionsService } from '../../transactions/transactions.service';
 
 interface QuickAddResult {
@@ -70,7 +71,7 @@ function toIso(d: Date): string {
 
         <mat-form-field appearance="outline">
           <mat-label>Amount</mat-label>
-          <span matTextPrefix>R$&nbsp;</span>
+          <span matTextPrefix>{{ currencySymbol() }}&nbsp;</span>
           <input
             matInput
             type="number"
@@ -178,6 +179,9 @@ function toIso(d: Date): string {
 export class QuickAddTransactionDialog {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(TransactionsService);
+  private readonly auth = inject(AuthService);
+
+  protected readonly currencySymbol = this.auth.currencySymbol;
   private readonly snackBar = inject(MatSnackBar);
   protected readonly ref = inject(MatDialogRef<QuickAddTransactionDialog, QuickAddResult>);
 
