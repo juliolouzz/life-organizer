@@ -11,6 +11,13 @@ spring:
 app:
   cors:
     allowed-origins: http://localhost:4200
+  auth:
+    # Local dev only: append reset / verify links to a file so the operator can
+    # follow them while no SMTP is wired up. NEVER enable this in profiles that
+    # ship to a real deployment - the file would hold credentials.
+    dev-delivery:
+      enabled: true
+      file-path: .tmp/auth-dev-links.txt
 
 logging:
   level:
