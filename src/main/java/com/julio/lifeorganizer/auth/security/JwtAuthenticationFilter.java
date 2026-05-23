@@ -61,16 +61,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String email = claims.get(JwtService.EMAIL_CLAIM, String.class);
             String role = claims.get(JwtService.ROLE_CLAIM, String.class);
 
-            // Account-state gate: a deletion pending user must not be allowed to
-            // ride out their access token. Skip the lookup when the user row is
-            // missing entirely (that path is handled by the controllers and is
+            // Account-state gate: a deletion-pending user must not be allowed to
+            // ride out their access token. Exception: /me/restore is the user's
+            // own way to undo a delete from the same session, so we let it
+            // through and the controller decides. The lookup is skipped when
+            // the user row is missing entirely (handled by the controllers as
             // the same observable behaviour as "user not found for token").
-            Optional<UserEntity> maybeUser = userRepository.findById(id);
-            if (maybeUser.isPresent()) {
-                UserEntity user = maybeUser.get();
-                if (user.isDeletionPending()
-                        && user.getDeletionScheduledAt().isAfter(clock.instant())) {
-                    throw new AccountDeletionPendingException(user.getDeletionScheduledAt());
+            if (!"/api/v1/me/restore".equals(request.getRequestURI())) {
+                Optional<UserEntity> maybeUser = userRepository.findById(id);
+                if (maybeUser.isPresent()) {
+                    UserEntity user = maybeUser.get();
+                    if (user.isDeletionPending()
+                            && user.getDeletionScheduledAt().isAfter(clock.instant())) {
+                        throw new AccountDeletionPendingException(user.getDeletionScheduledAt());
+                    }
                 }
             }
 

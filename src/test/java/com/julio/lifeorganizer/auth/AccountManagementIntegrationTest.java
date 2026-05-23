@@ -129,6 +129,8 @@ class AccountManagementIntegrationTest extends AbstractIntegrationTest {
 
         UserEntity after = userRepository.findById(userId).orElseThrow();
         assertThat(after.getEmail()).isEqualTo(newEmail);
+        // Clicking the link proves ownership, so the user is verified now.
+        assertThat(after.isEmailVerified()).isTrue();
     }
 
     @Test
@@ -210,16 +212,34 @@ class AccountManagementIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void cancelOwnDeletion_clearsScheduledAt_andLoginWorksAgain() {
+    void cancelOwnDeletion_viaAuthPath_clearsScheduledAt_andLoginWorksAgain() {
+        // Delete using the same access token; immediately cancel via the auth path.
+        // /me/restore is the one /me/* endpoint exempt from the JwtAuthenticationFilter
+        // deletion gate, so the user can undo from the same session.
         http.exchange("/api/v1/me/delete",
                 HttpMethod.POST,
                 new HttpEntity<>(Map.of("password", "S3cretValue"), authHeaders(accessToken)),
                 String.class);
 
-        // Restore via authenticated path - but the in-flight token is now blocked
-        // by the filter. We need a fresh login... which is blocked too. So the only
-        // authenticated way to restore is to do it BEFORE the next request lands
-        // through the filter. Realistic flow: use the anonymous confirm endpoint.
+        ResponseEntity<String> restore = http.exchange("/api/v1/me/restore",
+                HttpMethod.POST,
+                new HttpEntity<>(Map.of(), authHeaders(accessToken)),
+                String.class);
+        assertThat(restore.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<String> login = http.postForEntity("/api/v1/auth/login",
+                Map.of("email", email, "password", "S3cretValue"), String.class);
+        assertThat(login.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void cancelOwnDeletion_viaAnonymousLink_clearsScheduledAt() {
+        // Email-link path: works after login is blocked by the deletion gate.
+        http.exchange("/api/v1/me/delete",
+                HttpMethod.POST,
+                new HttpEntity<>(Map.of("password", "S3cretValue"), authHeaders(accessToken)),
+                String.class);
+
         UserEntity user = userRepository.findById(userId).orElseThrow();
         String token = jwtService.generateAccountRestoreToken(userId, user.getPasswordHash());
 

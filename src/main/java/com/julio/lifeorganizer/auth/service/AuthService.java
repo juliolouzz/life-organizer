@@ -200,6 +200,10 @@ public class AuthService {
             throw new ConflictException("Email already registered", "USER_EMAIL_EXISTS");
         }
         user.changeEmail(newEmail);
+        // Clicking the link is proof of ownership of the new address - the new
+        // email is verified by definition. If the user was previously unverified
+        // (held an unconfirmed old email), they are now verified too.
+        user.markEmailVerified();
         return UserResponse.from(userRepository.save(user));
     }
 
