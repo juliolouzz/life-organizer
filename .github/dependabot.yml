@@ -1,0 +1,49 @@
+version: 2
+
+updates:
+  # Maven dependencies: Spring Boot, jjwt, Testcontainers, ArchUnit, etc.
+  - package-ecosystem: maven
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Dublin
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      spring-boot:
+        patterns:
+          - "org.springframework.boot:*"
+          - "org.springframework.security:*"
+      testing:
+        patterns:
+          - "org.junit*"
+          - "org.assertj:*"
+          - "org.mockito:*"
+          - "org.testcontainers:*"
+          - "com.tngtech.archunit:*"
+
+  # GitHub Actions versions in .github/workflows/
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels:
+      - ci
+    commit-message:
+      prefix: "chore(ci)"
+
+  # Docker Compose / image bumps (postgres:16-alpine etc.)
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(docker)"
