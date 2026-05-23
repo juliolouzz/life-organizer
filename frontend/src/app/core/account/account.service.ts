@@ -26,6 +26,10 @@ export interface DeleteAccountPayload {
   password: string;
 }
 
+export interface LogoutAllPayload {
+  password: string;
+}
+
 export interface DeleteAccountResponse {
   deletionScheduledAt: string;
 }
@@ -74,6 +78,12 @@ export class AccountService {
         map((res) => this.requireData(res)),
         tap(() => this.auth.fetchMe().subscribe())
       );
+  }
+
+  logoutAllSessions(payload: LogoutAllPayload): Observable<void> {
+    return this.http
+      .post<ApiResponse<unknown>>(`${this.base}/me/sessions/logout-all`, payload)
+      .pipe(map(() => undefined));
   }
 
   private requireData<T>(res: ApiResponse<T>): T {

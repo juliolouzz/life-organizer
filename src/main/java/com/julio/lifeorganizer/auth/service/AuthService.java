@@ -129,6 +129,9 @@ public class AuthService {
         // so any subsequent attempt with the same token fails - effectively single-use.
         jwtService.verifyPasswordBinding(claims, user.getPasswordHash());
         user.changePasswordHash(passwordEncoder.encode(request.newPassword()));
+        // Slice 12: revocation-on-recovery. Any pre-existing session is terminated;
+        // a leaked refresh token from before the reset stops working.
+        user.bumpTokenVersion();
         userRepository.save(user);
     }
 
@@ -246,15 +249,23 @@ public class AuthService {
         }
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(UserNotFoundForTokenException::new);
+        // Slice 12: refresh tokens carry the user's token_version at issuance.
+        // A mismatch means the user has revoked (logged out all / changed
+        // password / reset password) since this refresh token was minted.
+        jwtService.verifyTokenVersion(claims, user.getTokenVersion());
+        if (user.isDeletionPending()
+                && user.getDeletionScheduledAt().isAfter(clock.instant())) {
+            throw new AccountDeletionPendingException(user.getDeletionScheduledAt());
+        }
         String access = jwtService.generateAccessToken(
-                user.getId(), user.getEmail(), user.getRole().name());
+                user.getId(), user.getEmail(), user.getRole().name(), user.getTokenVersion());
         return new AccessTokenResponse(access, "Bearer", jwtProperties.accessTtl().toSeconds());
     }
 
     private AuthTokensResponse buildTokens(UserEntity user) {
         String access = jwtService.generateAccessToken(
-                user.getId(), user.getEmail(), user.getRole().name());
-        String refresh = jwtService.generateRefreshToken(user.getId());
+                user.getId(), user.getEmail(), user.getRole().name(), user.getTokenVersion());
+        String refresh = jwtService.generateRefreshToken(user.getId(), user.getTokenVersion());
         return new AuthTokensResponse(
                 access, refresh, "Bearer", jwtProperties.accessTtl().toSeconds());
     }

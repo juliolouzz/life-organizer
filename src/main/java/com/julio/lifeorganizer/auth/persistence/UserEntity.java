@@ -37,6 +37,11 @@ public class UserEntity {
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified;
 
+    // Slice 12: revocation epoch. Every issued JWT carries this value as the
+    // "tv" claim; a bump invalidates every prior token for this user.
+    @Column(name = "token_version", nullable = false)
+    private int tokenVersion;
+
     // NULL while the account is active. Set to a future timestamp when the user
     // requests deletion; cleared on restore. The scheduled hard-delete job picks
     // up rows where this is non-null and in the past.
@@ -120,6 +125,20 @@ public class UserEntity {
 
     public void cancelDeletion() {
         this.deletionScheduledAt = null;
+    }
+
+    public int getTokenVersion() {
+        return tokenVersion;
+    }
+
+    /**
+     * Slice 12: invalidate every JWT previously issued for this user. Called
+     * by AccountService (logout-all, password change) and AuthService
+     * (password reset). The bump is monotonic - we never decrement, so a
+     * leaked old token cannot become valid again.
+     */
+    public void bumpTokenVersion() {
+        this.tokenVersion += 1;
     }
 
     public Instant getCreatedAt() {

@@ -16,6 +16,7 @@ import { ErrorCode } from '../../core/api/error-codes';
 import { AuthService } from '../../core/auth/auth.service';
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
 import { DeleteAccountDialogComponent, DeleteAccountDialogResult } from './delete-account-dialog.component';
+import { LogoutAllDialogComponent, LogoutAllDialogResult } from './logout-all-dialog.component';
 
 @Component({
   selector: 'app-profile-page',
@@ -114,6 +115,18 @@ import { DeleteAccountDialogComponent, DeleteAccountDialogResult } from './delet
             {{ passwordSubmitting() ? 'Updating...' : 'Update password' }}
           </button>
         </form>
+        <div class="divider"></div>
+        <div class="sessions-block">
+          <h4>Active sessions</h4>
+          <p class="muted">
+            Signed in on another device and want to revoke access?
+            "Sign out everywhere" invalidates every token, including the one on this device.
+          </p>
+          <button mat-stroked-button color="warn" (click)="openLogoutAllDialog()" [disabled]="loggingOutAll()">
+            <span class="material-symbols-outlined">logout</span>
+            {{ loggingOutAll() ? 'Signing out...' : 'Sign out of all devices' }}
+          </button>
+        </div>
       </mat-card>
 
       <!-- Email section -->
@@ -209,6 +222,9 @@ import { DeleteAccountDialogComponent, DeleteAccountDialogResult } from './delet
         color: #d97706;
       }
       .danger { border-color: color-mix(in srgb, #b91c1c 30%, transparent); }
+      .divider { height: 1px; background: var(--border-subtle); margin: 18px 0; }
+      .sessions-block h4 { margin: 0 0 6px 0; font-size: 0.95rem; font-weight: 600; }
+      .sessions-block .muted { font-size: 0.85rem; margin-bottom: 12px; }
       .ok-block {
         display: flex; flex-direction: column; align-items: flex-start;
         gap: 10px; padding: 14px;
@@ -240,6 +256,7 @@ export class ProfilePage implements OnInit {
   protected readonly emailSubmitting = signal(false);
   protected readonly emailSubmitted = signal(false);
   protected readonly emailSubmittedTo = signal('');
+  protected readonly loggingOutAll = signal(false);
 
   protected readonly profileForm = this.fb.nonNullable.group({
     displayName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]]
@@ -329,6 +346,32 @@ export class ProfilePage implements OnInit {
   protected resetEmailForm(): void {
     this.emailForm.reset({ newEmail: '', currentPassword: '' });
     this.emailSubmitted.set(false);
+  }
+
+  protected openLogoutAllDialog(): void {
+    const ref = this.dialog.open<LogoutAllDialogComponent, void, LogoutAllDialogResult>(
+      LogoutAllDialogComponent
+    );
+    ref.afterClosed().subscribe((result) => {
+      if (!result?.confirmed) return;
+      this.loggingOutAll.set(true);
+      this.accountService.logoutAllSessions({ password: result.password }).subscribe({
+        next: () => {
+          this.loggingOutAll.set(false);
+          this.snackBar.open('Signed out of all devices.', 'Dismiss', { duration: 4000 });
+          this.auth.logout();
+          this.router.navigate(['/login']);
+        },
+        error: (err: unknown) => {
+          this.loggingOutAll.set(false);
+          if (err instanceof HttpErrorResponse && err.error?.meta?.code === ErrorCode.INVALID_CREDENTIALS) {
+            this.snackBar.open('Wrong password. No sessions were signed out.', 'Dismiss', { duration: 4000 });
+          } else {
+            this.snackBar.open('Could not sign out of all devices.', 'Dismiss', { duration: 4000 });
+          }
+        }
+      });
+    });
   }
 
   protected openDeleteDialog(): void {

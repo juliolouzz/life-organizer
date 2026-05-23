@@ -6,6 +6,7 @@ import com.julio.lifeorganizer.auth.web.dto.ChangeEmailRequest;
 import com.julio.lifeorganizer.auth.web.dto.ChangePasswordRequest;
 import com.julio.lifeorganizer.auth.web.dto.DeleteAccountRequest;
 import com.julio.lifeorganizer.auth.web.dto.DeleteAccountResponse;
+import com.julio.lifeorganizer.auth.web.dto.LogoutAllRequest;
 import com.julio.lifeorganizer.auth.web.dto.UpdateProfileRequest;
 import com.julio.lifeorganizer.auth.web.dto.UserResponse;
 import com.julio.lifeorganizer.common.api.ApiResponse;
@@ -76,6 +77,15 @@ public class AccountController {
             @AuthenticationPrincipal AuthenticatedUser principal) {
         requirePrincipal(principal);
         return ApiResponse.ok(accountService.cancelOwnDeletion(principal.id()));
+    }
+
+    @PostMapping("/sessions/logout-all")
+    public ApiResponse<Void> logoutAllSessions(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @Valid @RequestBody LogoutAllRequest request) {
+        requirePrincipal(principal);
+        accountService.logoutAllSessions(principal.id(), request.password());
+        return new ApiResponse<>(true, null, "Signed out of all sessions", null);
     }
 
     private static void requirePrincipal(AuthenticatedUser principal) {

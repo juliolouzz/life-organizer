@@ -68,6 +68,9 @@ public class AccountService {
             throw new InvalidCredentialsException();
         }
         user.changePasswordHash(passwordEncoder.encode(request.newPassword()));
+        // Slice 12: a credential rotation also terminates every existing session.
+        // A leaked refresh token cannot outlive a password change.
+        user.bumpTokenVersion();
         userRepository.save(user);
     }
 
@@ -112,6 +115,25 @@ public class AccountService {
         mailService.sendAccountRestore(user.getEmail(), user.getDisplayName(),
                 "/restore-account?token=" + token);
         return new DeleteAccountResponse(scheduledAt);
+    }
+
+    /**
+     * Slice 12: terminate every active session for the caller. Increments
+     * users.token_version - the next time JwtAuthenticationFilter or
+     * AuthService.refresh runs the tv check, every previously-issued JWT
+     * (including the access token used to make THIS call) is rejected.
+     * Caller's frontend is expected to clear local state and route to /login.
+     */
+    @Transactional
+    public void logoutAllSessions(Long userId, String password) {
+        UserEntity user = loadUser(userId);
+        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+            throw new InvalidCredentialsException();
+        }
+        user.bumpTokenVersion();
+        userRepository.save(user);
+        log.info("logout-all for user {} - token_version is now {}",
+                userId, user.getTokenVersion());
     }
 
     @Transactional
