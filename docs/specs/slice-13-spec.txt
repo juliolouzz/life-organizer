@@ -1,0 +1,143 @@
+================================================================================
+LIFE ORGANIZER - SLICE 13 SPECIFICATION
+================================================================================
+Project       : Life Organizer
+Slice         : 13 - Per-user currency selection (BRL / USD / EUR)
+Status        : APPROVED - building this slice
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1. WHY
+--------------------------------------------------------------------------------
+
+The app has been BRL-only since Slice 1. Real users (and friends running the
+container) live in different currencies. A simple per-user setting is enough
+to make the UI feel native without dragging in FX rate management.
+
+
+--------------------------------------------------------------------------------
+2. DECISIONS LEDGER (LOCKED)
+--------------------------------------------------------------------------------
+
+#   Decision
+--- ----------------------------------------------------------------------------
+1   Currency is a per-USER setting stored on users.currency. Not per
+    transaction. Personal-finance users rarely mix currencies in one
+    account; if they do, that is a separate "accounts/wallets" feature
+    (not in scope here).
+
+2   Initial enum values: BRL, USD, EUR. Add more by extending the enum -
+    no schema change required.
+
+3   Display-only. NO foreign-exchange conversion. The number you typed is
+    the number you see; only the symbol and formatting locale change.
+
+4   Default for existing rows: BRL. Backward compatible.
+
+5   The user picks a currency at registration (defaults to BRL if not
+    sent). The /account page exposes a dropdown to change it later. No
+    password confirmation needed - this is cosmetic, not security-sensitive.
+
+6   Changing currency does NOT touch existing transaction amounts. A user
+    who switches from BRL to USD will see "$1,234.56" where the dashboard
+    previously said "R$ 1.234,56" - the underlying value is the same; the
+    presentation changes.
+
+7   Database migration V10:
+       ALTER TABLE users ADD COLUMN currency VARCHAR(3) NOT NULL DEFAULT 'BRL'
+           CHECK (currency IN ('BRL', 'USD', 'EUR'));
+
+8   API surface:
+    - GET /api/v1/me now includes "currency" field.
+    - PATCH /api/v1/me accepts an optional "currency" field alongside
+      displayName.
+    - POST /api/v1/auth/register accepts an optional "currency" field
+      (omitted -> BRL).
+
+9   Frontend:
+    - Register form: a Material select with the three options, defaulting
+      to BRL. Submit sends the selected value to /auth/register.
+    - /account page: dropdown inside the Profile section. Saving updates
+      the currency along with displayName.
+    - The current "MoneyBrlPipe" is renamed to "MoneyPipe" and now reads
+      the active user's currency from AuthService.currentUser() to pick
+      the symbol (R$ / $ / €) and the appropriate Intl locale.
+
+10  PDF report (Slice 10): the Thymeleaf template's currency formatting
+    now uses the user's currency. CSV exports keep raw decimal values
+    (no symbol, no formatting) so round-trip with /transactions/import
+    stays safe.
+
+11  Bonus: when app.mail.provider=file AND app.auth.dev-delivery.enabled=
+    false, the FileMailService logs a WARN at boot AND a WARN on every
+    invocation explaining the link cannot be delivered. Closes the silent-
+    drop footgun reported alongside this feature.
+
+
+--------------------------------------------------------------------------------
+3. NEW + CHANGED ENDPOINTS
+--------------------------------------------------------------------------------
+
+POST /api/v1/auth/register
+Body (currency is OPTIONAL):
+{
+  "email": "...",
+  "password": "...",
+  "displayName": "...",
+  "currency": "USD"          // BRL | USD | EUR; defaults to BRL
+}
+
+PATCH /api/v1/me
+Body:
+{
+  "displayName": "...",      // existing
+  "currency": "EUR"          // NEW - optional, ignored if absent
+}
+
+GET /api/v1/me response now includes "currency": "BRL" | "USD" | "EUR".
+
+
+--------------------------------------------------------------------------------
+4. ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+
+AC-13-1   POST /auth/register with currency="USD" persists USD on the
+          user row and returns it in /me. Omitting the field defaults
+          to BRL.
+AC-13-2   POST /auth/register rejects currency="GBP" (or any value not
+          in {BRL, USD, EUR}) with 400 + a per-field validation map.
+AC-13-3   PATCH /me with { "currency": "EUR" } persists EUR; subsequent
+          GET /me returns it. Existing displayName is unchanged unless
+          also provided.
+AC-13-4   PATCH /me with no body fields returns 400 (existing behaviour
+          stays).
+AC-13-5   Existing transactions are unchanged when currency changes.
+          /transactions/{id} still returns the same amount.
+AC-13-6   PDF summary uses the user's currency symbol (R$, $ or EUR).
+AC-13-7   CSV exports do NOT include currency symbol; numeric values are
+          plain (round-trip with /transactions/import still works).
+AC-13-8   Frontend register page shows a currency picker that defaults
+          to BRL.
+AC-13-9   Frontend /account page lets the user change currency; the
+          dashboard's money formatting updates without a manual refresh.
+AC-13-10  Boot-time warning: when app.mail.provider=file and
+          app.auth.dev-delivery.enabled=false, the backend logs a WARN
+          line containing the configuration property names and the
+          expected fix.
+
+
+--------------------------------------------------------------------------------
+5. OUT OF SCOPE
+--------------------------------------------------------------------------------
+
+* Per-transaction currency override.
+* Foreign-exchange conversion.
+* Historical currency change (re-converting past data).
+* User-defined custom currencies.
+* Locale-specific number formatting beyond what Intl.NumberFormat covers.
+
+
+================================================================================
+END OF SPEC - Slice 13
+================================================================================
