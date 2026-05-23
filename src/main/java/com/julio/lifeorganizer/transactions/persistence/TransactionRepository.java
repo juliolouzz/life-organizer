@@ -1,5 +1,8 @@
 package com.julio.lifeorganizer.transactions.persistence;
 
+import com.julio.lifeorganizer.insights.persistence.CategoryTotalRow;
+import com.julio.lifeorganizer.insights.persistence.DailyBucketRow;
+import com.julio.lifeorganizer.insights.persistence.TypeSumRow;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -46,4 +49,55 @@ public interface TransactionRepository extends JpaRepository<TransactionEntity, 
             Pageable pageable);
 
     Optional<TransactionEntity> findByIdAndUserIdAndDeletedAtIsNull(Long id, Long userId);
+
+    // Aggregations for the Slice 3 Insights endpoints.
+    // All scope by userId + exclude soft-deleted rows; the partial index
+    // idx_transactions_user_active backs the date-range predicate.
+
+    @Query("""
+            SELECT new com.julio.lifeorganizer.insights.persistence.TypeSumRow(
+                t.type, SUM(t.amount), COUNT(t))
+            FROM TransactionEntity t
+            WHERE t.userId = :userId
+              AND t.deletedAt IS NULL
+              AND t.transactionDate >= :from
+              AND t.transactionDate <= :to
+            GROUP BY t.type
+            """)
+    List<TypeSumRow> sumByType(
+            @Param("userId") Long userId,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to);
+
+    @Query("""
+            SELECT new com.julio.lifeorganizer.insights.persistence.CategoryTotalRow(
+                t.category, t.type, SUM(t.amount), COUNT(t))
+            FROM TransactionEntity t
+            WHERE t.userId = :userId
+              AND t.deletedAt IS NULL
+              AND t.transactionDate >= :from
+              AND t.transactionDate <= :to
+            GROUP BY t.category, t.type
+            ORDER BY SUM(t.amount) DESC
+            """)
+    List<CategoryTotalRow> sumByCategoryAndType(
+            @Param("userId") Long userId,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to);
+
+    @Query("""
+            SELECT new com.julio.lifeorganizer.insights.persistence.DailyBucketRow(
+                t.transactionDate, t.type, SUM(t.amount))
+            FROM TransactionEntity t
+            WHERE t.userId = :userId
+              AND t.deletedAt IS NULL
+              AND t.transactionDate >= :from
+              AND t.transactionDate <= :to
+            GROUP BY t.transactionDate, t.type
+            ORDER BY t.transactionDate ASC
+            """)
+    List<DailyBucketRow> sumByDayAndType(
+            @Param("userId") Long userId,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to);
 }
