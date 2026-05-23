@@ -96,6 +96,9 @@ import { AuthService } from '../../../core/auth/auth.service';
           </button>
 
           <p class="hint">
+            <a routerLink="/forgot-password" class="forgot-link">Forgot password?</a>
+          </p>
+          <p class="hint">
             Don't have an account?
             <a routerLink="/register">Register</a>
           </p>

@@ -5,4 +5,5 @@ export interface AuthenticatedUser {
   email: string;
   displayName: string;
   role: Role;
+  emailVerified?: boolean;
 }

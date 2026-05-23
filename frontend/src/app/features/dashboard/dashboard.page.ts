@@ -25,6 +25,7 @@ import {
 import { DateRange, PeriodPreset, rangeForPreset, toIso } from './period';
 import { PeriodSelectorComponent } from './period-selector/period-selector.component';
 import { QuickAddTransactionDialog } from './quick-add-dialog/quick-add-transaction.dialog';
+import { VerifyEmailBannerComponent } from '../../shared/components/verify-email-banner/verify-email-banner.component';
 import { Transaction, TransactionsService } from '../transactions/transactions.service';
 
 @Component({
@@ -43,11 +44,14 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
     IncomeExpenseChartComponent,
     CategoryDonutComponent,
     BudgetsWidgetComponent,
+    VerifyEmailBannerComponent,
     PeriodSelectorComponent,
     MoneyBrlPipe
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
+    <app-verify-email-banner />
+
     <app-page-header
       title="Dashboard"
       subtitle="How your money moved this period."
