@@ -4,6 +4,7 @@ import com.julio.lifeorganizer.common.api.PageMeta;
 import com.julio.lifeorganizer.common.exception.InvalidQueryException;
 import com.julio.lifeorganizer.common.exception.NotFoundException;
 import com.julio.lifeorganizer.config.PaginationProperties;
+import com.julio.lifeorganizer.recurring.service.RecurringMaterialiser;
 import com.julio.lifeorganizer.transactions.domain.CursorCodec;
 import com.julio.lifeorganizer.transactions.persistence.TransactionEntity;
 import com.julio.lifeorganizer.transactions.persistence.TransactionRepository;
@@ -32,13 +33,16 @@ public class TransactionService {
     private final TransactionRepository repository;
     private final PaginationProperties paginationProperties;
     private final Clock clock;
+    private final RecurringMaterialiser recurringMaterialiser;
 
     public TransactionService(TransactionRepository repository,
                               PaginationProperties paginationProperties,
-                              Clock clock) {
+                              Clock clock,
+                              RecurringMaterialiser recurringMaterialiser) {
         this.repository = repository;
         this.paginationProperties = paginationProperties;
         this.clock = clock;
+        this.recurringMaterialiser = recurringMaterialiser;
     }
 
     @Transactional
@@ -53,10 +57,16 @@ public class TransactionService {
         return TransactionResponse.from(repository.save(entity));
     }
 
+    // Not readOnly: the materialiser may INSERT new transactions on this call, so the
+    // surrounding transaction must allow writes (the class default is readOnly = true).
+    @Transactional
     public PageResult list(Long userId, ListQuery query) {
         if (query.from() != null && query.to() != null && query.from().isAfter(query.to())) {
             throw new InvalidQueryException("from must be on or before to");
         }
+        // Catch up any due recurring transactions before listing so the user always sees
+        // an up-to-date view. Cheap when nothing is due (single indexed query).
+        recurringMaterialiser.materialiseFor(userId);
         int limit = resolveLimit(query.limit());
 
         // Fetch limit+1 to detect "has more" without an extra count query.

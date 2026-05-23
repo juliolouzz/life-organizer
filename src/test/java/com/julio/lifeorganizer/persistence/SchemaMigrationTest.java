@@ -67,7 +67,7 @@ class SchemaMigrationTest extends AbstractJpaTest {
 
         assertThat(history)
                 .extracting(row -> row.get("version"))
-                .containsExactly("1", "2", "3");
+                .containsExactly("1", "2", "3", "4", "5", "6");
         assertThat(history)
                 .extracting(row -> row.get("success"))
                 .containsOnly(true);
