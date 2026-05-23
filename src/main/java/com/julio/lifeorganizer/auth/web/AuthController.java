@@ -3,10 +3,13 @@ package com.julio.lifeorganizer.auth.web;
 import com.julio.lifeorganizer.auth.service.AuthService;
 import com.julio.lifeorganizer.auth.web.dto.AccessTokenResponse;
 import com.julio.lifeorganizer.auth.web.dto.AuthTokensResponse;
+import com.julio.lifeorganizer.auth.web.dto.ForgotPasswordRequest;
 import com.julio.lifeorganizer.auth.web.dto.LoginRequest;
 import com.julio.lifeorganizer.auth.web.dto.RefreshRequest;
 import com.julio.lifeorganizer.auth.web.dto.RegisterRequest;
+import com.julio.lifeorganizer.auth.web.dto.ResetPasswordRequest;
 import com.julio.lifeorganizer.auth.web.dto.UserResponse;
+import com.julio.lifeorganizer.auth.web.dto.VerifyEmailRequest;
 import com.julio.lifeorganizer.common.api.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -40,5 +43,38 @@ public class AuthController {
     @PostMapping("/refresh")
     public ApiResponse<AccessTokenResponse> refresh(@Valid @RequestBody RefreshRequest request) {
         return ApiResponse.ok(authService.refresh(request));
+    }
+
+    /**
+     * Always returns 200 with the same body shape to prevent user enumeration.
+     * If the email is registered, a reset link is generated and logged server-side.
+     */
+    @PostMapping("/forgot-password")
+    public ApiResponse<Object> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.requestPasswordReset(request);
+        return new ApiResponse<>(true, null,
+                "If that email is registered, a reset link has been sent.", null);
+    }
+
+    @PostMapping("/reset-password")
+    public ApiResponse<Object> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return new ApiResponse<>(true, null, "Password updated.", null);
+    }
+
+    @PostMapping("/verify-email")
+    public ApiResponse<UserResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        return ApiResponse.ok(authService.verifyEmail(request));
+    }
+
+    /**
+     * Re-sends the verification link for the requested email. Same anti-enumeration
+     * pattern as forgot-password: always 200, same body shape.
+     */
+    @PostMapping("/resend-verification")
+    public ApiResponse<Object> resendVerification(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.resendVerification(request);
+        return new ApiResponse<>(true, null,
+                "If that email is registered and unverified, a new link has been sent.", null);
     }
 }

@@ -3,6 +3,8 @@ package com.julio.lifeorganizer.config;
 import com.julio.lifeorganizer.auth.security.JwtAuthenticationEntryPoint;
 import com.julio.lifeorganizer.auth.security.JwtAuthenticationFilter;
 import com.julio.lifeorganizer.auth.service.JwtService;
+import com.julio.lifeorganizer.common.security.RateLimitFilter;
+import com.julio.lifeorganizer.common.security.RateLimiter;
 import java.time.Clock;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -33,14 +35,21 @@ public class SecurityConfig {
     @Value("${app.cors.allowed-origins:}")
     private List<String> allowedOrigins;
 
+    // Disabled in the test profile (application-test.yml) so integration tests can
+    // register / login arbitrarily many times. Production default is enabled.
+    @Value("${app.rate-limit.enabled:true}")
+    private boolean rateLimitEnabled;
+
     @Bean
     public SecurityFilterChain filterChain(
             HttpSecurity http,
             JwtService jwtService,
             JwtAuthenticationEntryPoint entryPoint,
+            RateLimiter rateLimiter,
             @Qualifier("handlerExceptionResolver") HandlerExceptionResolver resolver) throws Exception {
 
         JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, resolver);
+        RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiter, resolver, rateLimitEnabled);
 
         http
                 .csrf(csrf -> csrf.disable())
@@ -52,9 +61,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login",
-                                "/api/v1/auth/refresh").permitAll()
+                                "/api/v1/auth/refresh",
+                                "/api/v1/auth/forgot-password",
+                                "/api/v1/auth/reset-password",
+                                "/api/v1/auth/verify-email",
+                                "/api/v1/auth/resend-verification").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().authenticated())
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

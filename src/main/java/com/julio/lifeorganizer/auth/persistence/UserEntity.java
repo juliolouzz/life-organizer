@@ -34,6 +34,9 @@ public class UserEntity {
     @Column(name = "role", nullable = false, length = 20)
     private Role role;
 
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -75,6 +78,18 @@ public class UserEntity {
 
     public Role getRole() {
         return role;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
+    }
+
+    public void markEmailVerified() {
+        this.emailVerified = true;
+    }
+
+    public void changePasswordHash(String newHash) {
+        this.passwordHash = newHash;
     }
 
     public Instant getCreatedAt() {

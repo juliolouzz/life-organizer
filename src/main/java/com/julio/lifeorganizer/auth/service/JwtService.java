@@ -10,6 +10,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import javax.crypto.SecretKey;
@@ -24,8 +25,14 @@ public class JwtService {
     public static final String TYP_CLAIM = "typ";
     public static final String TYP_ACCESS = "access";
     public static final String TYP_REFRESH = "refresh";
+    public static final String TYP_PASSWORD_RESET = "password_reset";
+    public static final String TYP_VERIFY_EMAIL = "verify_email";
     public static final String EMAIL_CLAIM = "email";
     public static final String ROLE_CLAIM = "role";
+
+    // Slice 8 token TTLs (decision 2).
+    private static final Duration PASSWORD_RESET_TTL = Duration.ofHours(1);
+    private static final Duration VERIFY_EMAIL_TTL = Duration.ofHours(24);
 
     private final SecretKey signingKey;
     private final JwtProperties props;
@@ -70,6 +77,40 @@ public class JwtService {
     public Claims parseRefreshToken(String token) {
         Claims claims = parse(token);
         requireTyp(claims, TYP_REFRESH);
+        return claims;
+    }
+
+    public String generatePasswordResetToken(Long userId) {
+        Instant now = clock.instant();
+        return Jwts.builder()
+                .subject(String.valueOf(userId))
+                .claim(TYP_CLAIM, TYP_PASSWORD_RESET)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plus(PASSWORD_RESET_TTL)))
+                .signWith(signingKey, Jwts.SIG.HS256)
+                .compact();
+    }
+
+    public Claims parsePasswordResetToken(String token) {
+        Claims claims = parse(token);
+        requireTyp(claims, TYP_PASSWORD_RESET);
+        return claims;
+    }
+
+    public String generateEmailVerificationToken(Long userId) {
+        Instant now = clock.instant();
+        return Jwts.builder()
+                .subject(String.valueOf(userId))
+                .claim(TYP_CLAIM, TYP_VERIFY_EMAIL)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plus(VERIFY_EMAIL_TTL)))
+                .signWith(signingKey, Jwts.SIG.HS256)
+                .compact();
+    }
+
+    public Claims parseEmailVerificationToken(String token) {
+        Claims claims = parse(token);
+        requireTyp(claims, TYP_VERIFY_EMAIL);
         return claims;
     }
 
