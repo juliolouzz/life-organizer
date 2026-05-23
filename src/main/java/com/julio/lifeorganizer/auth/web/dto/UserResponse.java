@@ -9,7 +9,8 @@ public record UserResponse(
         String displayName,
         String role,
         boolean emailVerified,
-        Instant deletionScheduledAt) {
+        Instant deletionScheduledAt,
+        String currency) {
 
     public static UserResponse from(UserEntity user) {
         return new UserResponse(
@@ -18,7 +19,8 @@ public record UserResponse(
                 user.getDisplayName(),
                 user.getRole().name(),
                 user.isEmailVerified(),
-                user.getDeletionScheduledAt()
+                user.getDeletionScheduledAt(),
+                user.getCurrency().name()
         );
     }
 }

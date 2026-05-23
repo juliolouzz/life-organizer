@@ -1,5 +1,6 @@
 package com.julio.lifeorganizer.auth.service;
 
+import com.julio.lifeorganizer.auth.domain.Currency;
 import com.julio.lifeorganizer.auth.domain.Role;
 import com.julio.lifeorganizer.auth.persistence.UserEntity;
 import com.julio.lifeorganizer.auth.persistence.UserRepository;
@@ -82,7 +83,8 @@ public class AuthService {
                 email,
                 passwordEncoder.encode(request.password()),
                 request.displayName().trim(),
-                Role.ROLE_USER
+                Role.ROLE_USER,
+                Currency.parseOrDefault(request.currency())
         );
         UserEntity saved = userRepository.save(user);
         String verifyToken = jwtService.generateEmailVerificationToken(saved.getId());

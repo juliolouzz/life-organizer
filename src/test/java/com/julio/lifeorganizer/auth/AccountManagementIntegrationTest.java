@@ -78,6 +78,31 @@ class AccountManagementIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void patchMe_updatesCurrency_andRoundTripsThroughMe() throws Exception {
+        HttpClient client = HttpClient.newHttpClient();
+        HttpResponse<String> resp = patchJsonAuthed(client, "/api/v1/me",
+                Map.of("displayName", "Reno", "currency", "USD"));
+        assertThat(resp.statusCode()).isEqualTo(200);
+        assertThat(json.readTree(resp.body()).get("data").get("currency").asText()).isEqualTo("USD");
+
+        // GET /me reflects the change
+        ResponseEntity<String> me = http.exchange("/api/v1/me",
+                HttpMethod.GET,
+                new HttpEntity<>(authHeaders(accessToken)),
+                String.class);
+        assertThat(json.readTree(me.getBody()).get("data").get("currency").asText()).isEqualTo("USD");
+    }
+
+    @Test
+    void patchMe_invalidCurrency_returns400() throws Exception {
+        HttpClient client = HttpClient.newHttpClient();
+        HttpResponse<String> resp = patchJsonAuthed(client, "/api/v1/me",
+                Map.of("displayName", "X", "currency", "GBP"));
+        assertThat(resp.statusCode()).isEqualTo(400);
+        assertThat(json.readTree(resp.body()).get("meta").has("currency")).isTrue();
+    }
+
+    @Test
     void changePassword_happyPath_thenLoginWorksWithNewPassword() {
         ResponseEntity<String> resp = http.exchange("/api/v1/me/password",
                 HttpMethod.POST,

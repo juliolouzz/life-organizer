@@ -58,6 +58,10 @@ public class AccountService {
     public UserResponse updateProfile(Long userId, UpdateProfileRequest request) {
         UserEntity user = loadUser(userId);
         user.changeDisplayName(request.displayName().trim());
+        if (request.currency() != null && !request.currency().isBlank()) {
+            user.changeCurrency(com.julio.lifeorganizer.auth.domain.Currency
+                    .parseOrDefault(request.currency()));
+        }
         return UserResponse.from(userRepository.save(user));
     }
 
