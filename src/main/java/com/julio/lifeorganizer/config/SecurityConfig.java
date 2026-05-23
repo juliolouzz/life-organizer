@@ -62,17 +62,25 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration cors = new CorsConfiguration();
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         if (allowedOrigins != null && !allowedOrigins.isEmpty() && !allowedOrigins.get(0).isBlank()) {
+            // Explicit cross-origin support requested (typically local dev with ng serve on :4200
+            // hitting backend on :8080).
+            CorsConfiguration cors = new CorsConfiguration();
             cors.setAllowedOrigins(allowedOrigins);
             cors.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
             cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-Id"));
             cors.setExposedHeaders(List.of("X-Request-Id"));
             cors.setAllowCredentials(false);
             cors.setMaxAge(3600L);
+            source.registerCorsConfiguration("/api/**", cors);
         }
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", cors);
+        // No allowed-origins configured -> register no CORS rules. Spring's CorsFilter then
+        // treats incoming requests as non-CORS (same-origin) and lets them through. This is the
+        // right behaviour for the Docker bundle where nginx proxies /api -> backend so the
+        // browser sees one origin. Registering an empty CorsConfiguration would instead reject
+        // every request that carries an Origin header (browsers send it even on same-origin
+        // JSON POSTs).
         return source;
     }
 
