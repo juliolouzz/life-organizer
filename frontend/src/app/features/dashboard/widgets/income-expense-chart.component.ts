@@ -115,6 +115,12 @@ export class IncomeExpenseChartComponent implements OnChanges {
   protected chartOptions(): ChartConfiguration<'bar'>['options'] {
     void this.tick();
     void this.theme.mode();
+    // Hoist the currency reads so Angular's signal tracker captures the
+    // dependency. If the reads only happened inside the callbacks below,
+    // ng2-charts would call them later (outside Angular's reactive context)
+    // and a /profile currency change would never repaint the chart.
+    const symbol = this.auth.currencySymbol();
+    const locale = this.auth.currencyLocale();
 
     const gridColor = readVar('--border-subtle', '#e5e7eb');
     const textColor = readVar('--text-muted', '#6b7280');
@@ -146,8 +152,6 @@ export class IncomeExpenseChartComponent implements OnChanges {
           callbacks: {
             label: (ctx) => {
               const y = (ctx.parsed.y ?? 0) as number;
-              const symbol = this.auth.currencySymbol();
-              const locale = this.auth.currencyLocale();
               return `${ctx.dataset.label}: ${symbol} ${y.toLocaleString(locale, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
@@ -168,10 +172,7 @@ export class IncomeExpenseChartComponent implements OnChanges {
             color: textColor,
             font: { family: 'JetBrains Mono, monospace', size: 11 },
             callback: (val) =>
-              `${this.auth.currencySymbol()} ${Number(val).toLocaleString(
-                this.auth.currencyLocale(),
-                { maximumFractionDigits: 0 }
-              )}`
+              `${symbol} ${Number(val).toLocaleString(locale, { maximumFractionDigits: 0 })}`
           }
         }
       }

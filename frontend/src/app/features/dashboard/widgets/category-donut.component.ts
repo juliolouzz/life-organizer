@@ -193,6 +193,10 @@ export class CategoryDonutComponent implements OnChanges {
   protected chartOptions(): ChartConfiguration<'doughnut'>['options'] {
     void this.tick();
     void this.theme.mode();
+    // Hoist currency reads so Angular tracks the dependency (see the same
+    // comment in income-expense-chart.component.ts).
+    const symbol = this.auth.currencySymbol();
+    const locale = this.auth.currencyLocale();
     return {
       responsive: true,
       maintainAspectRatio: false,
@@ -209,10 +213,8 @@ export class CategoryDonutComponent implements OnChanges {
           padding: 10,
           callbacks: {
             label: (ctx) =>
-              `${ctx.label}: ${this.auth.currencySymbol()} ${Number(ctx.parsed).toLocaleString(
-                this.auth.currencyLocale(),
-                { minimumFractionDigits: 2, maximumFractionDigits: 2 }
-              )}`
+              `${ctx.label}: ${symbol} ${Number(ctx.parsed).toLocaleString(locale,
+                { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
           }
         }
       }
