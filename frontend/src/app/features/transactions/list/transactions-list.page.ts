@@ -58,6 +58,10 @@ import { Transaction, TransactionsService } from '../transactions.service';
         <span class="material-symbols-outlined nav-arrow">arrow_back</span>
         Back to dashboard
       </a>
+      <a mat-stroked-button routerLink="/transactions/import" data-testid="goto-import">
+        <span class="material-symbols-outlined nav-arrow">upload_file</span>
+        Import CSV
+      </a>
       <a mat-flat-button color="primary" routerLink="/transactions/new" data-testid="new-transaction">
         <span class="material-symbols-outlined">add</span>
         New transaction

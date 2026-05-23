@@ -41,6 +41,13 @@ export const APP_ROUTES: Routes = [
           )
       },
       {
+        path: 'transactions/import',
+        loadComponent: () =>
+          import('./features/transactions/import/transactions-import.page').then(
+            (m) => m.TransactionsImportPage
+          )
+      },
+      {
         path: 'transactions/:id/edit',
         loadComponent: () =>
           import('./features/transactions/form/transaction-form.page').then(

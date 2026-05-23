@@ -108,6 +108,13 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- CSV parsing (Slice 7 import endpoint) -->
+        <dependency>
+            <groupId>com.opencsv</groupId>
+            <artifactId>opencsv</artifactId>
+            <version>5.10</version>
+        </dependency>
+
         <!-- JWT signing/parsing -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
