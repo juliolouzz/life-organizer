@@ -13,6 +13,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { ErrorCode } from '../../../core/api/error-codes';
+import { AuthService } from '../../../core/auth/auth.service';
 import { PageHeaderComponent } from '../../../shared/components/page-header/page-header.component';
 import { TransactionsService } from '../transactions.service';
 
@@ -74,7 +75,7 @@ import { TransactionsService } from '../transactions.service';
 
           <mat-form-field appearance="outline">
             <mat-label>Amount</mat-label>
-            <span matTextPrefix>R$&nbsp;</span>
+            <span matTextPrefix>{{ currencySymbol() }}&nbsp;</span>
             <input
               matInput
               type="number"
@@ -180,6 +181,9 @@ export class TransactionFormPage implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly auth = inject(AuthService);
+
+  protected readonly currencySymbol = this.auth.currencySymbol;
 
   protected readonly mode = signal<'create' | 'edit'>('create');
   protected readonly editingId = signal<number | null>(null);

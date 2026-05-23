@@ -166,13 +166,14 @@ public class ReportsExportService {
     /**
      * Slice 13 currency-aware formatting. Uses the same number layout
      * everywhere ("%,.2f") for predictable PDF rendering; only the
-     * leading symbol changes.
+     * leading symbol changes. EUR uses the actual euro glyph, not the
+     * three-letter code, to match the frontend's pipe output.
      */
     private static String format(BigDecimal v, Currency currency) {
         String symbol = switch (currency) {
             case BRL -> "R$ ";
             case USD -> "$ ";
-            case EUR -> "EUR ";
+            case EUR -> "€ ";
         };
         return symbol + String.format(Locale.US, "%,.2f", v == null ? BigDecimal.ZERO : v);
     }

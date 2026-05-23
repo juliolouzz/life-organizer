@@ -11,8 +11,9 @@ import { MatCardModule } from '@angular/material/card';
 import { NgChartsModule } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
 
-import { BucketTotal, Granularity } from '../insights.service';
+import { AuthService } from '../../../core/auth/auth.service';
 import { ThemeService } from '../../../core/theme/theme.service';
+import { BucketTotal, Granularity } from '../insights.service';
 
 @Component({
   selector: 'app-income-expense-chart',
@@ -67,6 +68,7 @@ export class IncomeExpenseChartComponent implements OnChanges {
   @Input() granularity: Granularity = 'DAY';
 
   private readonly theme = inject(ThemeService);
+  private readonly auth = inject(AuthService);
   private readonly tick = signal(0);
 
   protected granularityLabel(): string {
@@ -144,7 +146,9 @@ export class IncomeExpenseChartComponent implements OnChanges {
           callbacks: {
             label: (ctx) => {
               const y = (ctx.parsed.y ?? 0) as number;
-              return `${ctx.dataset.label}: R$ ${y.toLocaleString('pt-BR', {
+              const symbol = this.auth.currencySymbol();
+              const locale = this.auth.currencyLocale();
+              return `${ctx.dataset.label}: ${symbol} ${y.toLocaleString(locale, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
               })}`;
@@ -164,7 +168,10 @@ export class IncomeExpenseChartComponent implements OnChanges {
             color: textColor,
             font: { family: 'JetBrains Mono, monospace', size: 11 },
             callback: (val) =>
-              `R$ ${Number(val).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
+              `${this.auth.currencySymbol()} ${Number(val).toLocaleString(
+                this.auth.currencyLocale(),
+                { maximumFractionDigits: 0 }
+              )}`
           }
         }
       }

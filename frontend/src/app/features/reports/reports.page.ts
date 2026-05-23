@@ -10,6 +10,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 
+import { AuthService } from '../../core/auth/auth.service';
 import {
   CategoryTrendsReport,
   ReportsService,
@@ -297,6 +298,7 @@ const MONTHS: { value: number; label: string }[] = [
 export class ReportsPage {
   private readonly api = inject(ReportsService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly auth = inject(AuthService);
 
   protected readonly months = MONTHS;
   protected readonly years = this.buildYears();
@@ -390,7 +392,9 @@ export class ReportsPage {
   }
 
   protected brl(amount: number): string {
-    return 'R$ ' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return this.auth.currencySymbol() + ' '
+        + amount.toLocaleString(this.auth.currencyLocale(),
+            { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   protected pct(value: number, max: number): number {
