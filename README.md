@@ -1,5 +1,9 @@
 # Life Organizer
 
+[![CI](https://github.com/juliolouzz/life-organizer/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/juliolouzz/life-organizer/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/juliolouzz/life-organizer/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/juliolouzz/life-organizer/actions/workflows/codeql.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Personal finance + life management API. **Slice 1**: user accounts, JWT auth, transactions CRUD.
 
 > Behavioral contract: [`docs/specs/slice-1-spec.txt`](docs/specs/slice-1-spec.txt)
