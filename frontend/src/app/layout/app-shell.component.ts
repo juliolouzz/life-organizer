@@ -36,11 +36,20 @@ import { ThemeService } from '../core/theme/theme.service';
           </div>
           <div class="brand-text">
             <strong>Life Organizer</strong>
-            <small>v0.2 · Slice 2</small>
+            <small>v0.3 · Slice 3</small>
           </div>
         </div>
 
         <nav class="nav-section">
+          <a
+            mat-list-item
+            routerLink="/dashboard"
+            routerLinkActive="active"
+            class="nav-item"
+          >
+            <span class="material-symbols-outlined nav-icon">dashboard</span>
+            Dashboard
+          </a>
           <a
             mat-list-item
             routerLink="/transactions"

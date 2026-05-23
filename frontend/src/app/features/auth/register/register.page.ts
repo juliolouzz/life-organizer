@@ -246,7 +246,7 @@ export class RegisterPage {
       next: (user) => {
         this.submitting.set(false);
         this.snackBar.open(`Welcome, ${user.displayName}`, 'Dismiss', { duration: 4000 });
-        this.router.navigate(['/transactions']);
+        this.router.navigate(['/dashboard']);
       },
       error: (err: unknown) => {
         this.submitting.set(false);
