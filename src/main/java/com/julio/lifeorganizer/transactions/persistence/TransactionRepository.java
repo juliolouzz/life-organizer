@@ -100,4 +100,23 @@ public interface TransactionRepository extends JpaRepository<TransactionEntity, 
             @Param("userId") Long userId,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to);
+
+    /**
+     * Slice 10 trends: returns the raw (date, category, type, amount) rows in
+     * the trends window. The service aggregates by (year, month) in memory -
+     * portability across dialects matters more than skipping a handful of
+     * groupings on personal-data volumes.
+     */
+    @Query("""
+            SELECT t FROM TransactionEntity t
+            WHERE t.userId = :userId
+              AND t.deletedAt IS NULL
+              AND t.transactionDate >= :from
+              AND t.transactionDate <= :to
+            ORDER BY t.transactionDate ASC
+            """)
+    List<TransactionEntity> findInWindowForTrends(
+            @Param("userId") Long userId,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to);
 }

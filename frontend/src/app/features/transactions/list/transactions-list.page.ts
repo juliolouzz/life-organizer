@@ -18,6 +18,7 @@ import {
   ConfirmDialogComponent,
   ConfirmDialogData
 } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
+import { ReportsService } from '../../../core/reports/reports.service';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { PageHeaderComponent } from '../../../shared/components/page-header/page-header.component';
 import { MoneyBrlPipe } from '../../../shared/pipes/money-brl.pipe';
@@ -62,6 +63,16 @@ import { Transaction, TransactionsService } from '../transactions.service';
         <span class="material-symbols-outlined nav-arrow">upload_file</span>
         Import CSV
       </a>
+      <button
+        mat-stroked-button
+        type="button"
+        (click)="downloadCsv()"
+        [disabled]="downloading()"
+        data-testid="download-csv"
+      >
+        <span class="material-symbols-outlined nav-arrow">file_download</span>
+        {{ downloading() ? 'Downloading...' : 'Download CSV' }}
+      </button>
       <a mat-flat-button color="primary" routerLink="/transactions/new" data-testid="new-transaction">
         <span class="material-symbols-outlined">add</span>
         New transaction
@@ -294,6 +305,7 @@ import { Transaction, TransactionsService } from '../transactions.service';
 })
 export class TransactionsListPage implements OnInit {
   private readonly api = inject(TransactionsService);
+  private readonly reportsApi = inject(ReportsService);
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
@@ -304,6 +316,7 @@ export class TransactionsListPage implements OnInit {
   protected readonly rows = signal<Transaction[]>([]);
   protected readonly nextCursor = signal<string | null>(null);
   protected readonly loading = signal(false);
+  protected readonly downloading = signal(false);
 
   protected readonly filterForm = this.fb.nonNullable.group({
     from: this.fb.control<Date | null>(null),
@@ -406,6 +419,38 @@ export class TransactionsListPage implements OnInit {
         },
         error: () => this.loading.set(false)
       });
+  }
+
+  protected downloadCsv(): void {
+    if (this.downloading()) return;
+    const { from, to } = this.filterForm.getRawValue();
+    const fromIso = from ? toIso(from) : null;
+    const toIsoStr = to ? toIso(to) : null;
+    this.downloading.set(true);
+    this.reportsApi.downloadTransactionsCsv(fromIso, toIsoStr).subscribe({
+      next: (blob) => {
+        this.downloading.set(false);
+        const filename =
+          'transactions-' +
+          (fromIso ?? 'all') +
+          '-to-' +
+          (toIsoStr ?? 'all') +
+          '.csv';
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.downloading.set(false);
+        this.snackBar.open('Could not download CSV.', 'Dismiss', { duration: 4000 });
+      }
+    });
   }
 }
 

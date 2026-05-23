@@ -1,0 +1,303 @@
+================================================================================
+LIFE ORGANIZER - SLICE 10 SPECIFICATION
+================================================================================
+Project       : Life Organizer
+Slice         : 10 - Reports & insights (monthly summary, YoY, trends, CSV/PDF export)
+Status        : APPROVED - building this slice
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1. WHY
+--------------------------------------------------------------------------------
+
+The dashboard (Slice 3) shows a single period at a glance. Useful for "how did
+this month go?" but unhelpful for the questions a personal-finance app actually
+needs to answer:
+
+  - Am I spending more on groceries this year than last year?
+  - Which categories have crept up over the last six months?
+  - Can I hand my accountant a clean export of last quarter's transactions?
+
+Slice 10 adds a dedicated /reports page with three analytical views plus two
+export formats. All views reuse data the app already has; nothing new lands in
+the DB. The exports unblock both the "give my data to my accountant" use case
+(CSV) and the "share a snapshot with my partner" use case (PDF).
+
+
+--------------------------------------------------------------------------------
+2. DECISIONS LEDGER (LOCKED)
+--------------------------------------------------------------------------------
+
+#   Decision
+--- ----------------------------------------------------------------------------
+1   Three report views, all under one /reports page with tabs:
+      - Monthly Summary    (totals + top categories + daily breakdown)
+      - Year-over-Year     (this month vs same month last year, side by side)
+      - Category Trends    (last 6 / 12 months per category, line chart)
+
+2   Reports operate on the authenticated user's own data only. user_id comes
+    from the JWT subject as everywhere else in the app. Soft-deleted
+    transactions (deleted_at IS NOT NULL) are excluded.
+
+3   PDF generation is server-side using OpenHTMLtoPDF + Thymeleaf:
+      - A Thymeleaf template renders to XHTML
+      - openhtmltopdf-pdfbox converts that to a PDF byte[]
+      - Endpoint returns Content-Type: application/pdf with a sensible
+        Content-Disposition: attachment; filename="..." header
+    Choice rationale: Apache 2.0, output identical for every client, easy
+    to template the same data as the HTML view.
+
+4   CSV export uses the SAME format as the Slice 7 import:
+        date,type,amount,category,description
+      - ISO date (YYYY-MM-DD)
+      - type in EN: INCOME / EXPENSE / SAVINGS
+      - amount with dot as decimal separator
+      - category by name (auto-creates on import - existing S7 behaviour)
+      - description optional (empty string if absent)
+    This makes the export round-trip-safe: download, edit, re-import.
+
+5   Currency formatting in the PDF is BRL (en-US locale with R$ prefix
+    to avoid Java's heavy ICU dependency). The CSV uses raw numeric values.
+
+6   Report periods are calendar months (1..12 of a given year). No arbitrary
+    date ranges - the dashboard already covers that case. A user wanting a
+    quarterly view picks three months in sequence; a user wanting a year
+    uses the YoY tab or Category Trends.
+
+7   Year-over-Year compares the selected month with the SAME month one year
+    earlier. Output is two numeric rows (this-year, last-year) plus the
+    delta (absolute and percentage) for each of: total income, total
+    expenses, savings, net, and per-category expense top-5.
+
+8   Category Trends shows monthly spend per category over the last 12
+    months. The frontend renders a line chart per category (re-using the
+    chart components from Slice 3). Backend returns the raw data; chart
+    smoothing is a frontend concern.
+
+9   Endpoints (all GET, all auth-required, all reuse the existing
+    @AuthenticationPrincipal pattern):
+      GET /api/v1/reports/summary?year=YYYY&month=MM
+      GET /api/v1/reports/yoy?year=YYYY&month=MM
+      GET /api/v1/reports/trends?months=6|12     (default 12)
+      GET /api/v1/reports/summary.csv?year=YYYY&month=MM
+      GET /api/v1/reports/summary.pdf?year=YYYY&month=MM
+      GET /api/v1/reports/transactions.csv?from=YYYY-MM-DD&to=YYYY-MM-DD
+
+10  CSV download endpoints return text/csv with BOM-free UTF-8 (BOM breaks
+    Linux command-line tooling; modern Excel handles UTF-8 without BOM).
+    PDF is application/pdf.
+
+11  No database changes. Slice 10 is pure read-side aggregation over the
+    existing transactions / categories tables.
+
+12  Rate limiting: NOT applied to /reports/*. These are authenticated,
+    expensive to compute but bounded per user, and the JWT auth check is
+    the only gate that matters. Aggressive caching is out of scope for
+    this slice.
+
+
+--------------------------------------------------------------------------------
+3. NEW ENDPOINTS
+--------------------------------------------------------------------------------
+
+GET /api/v1/reports/summary?year=YYYY&month=MM
+Response body (ApiResponse envelope):
+{
+  "success": true,
+  "data": {
+    "year": 2026, "month": 5,
+    "totals": {
+      "income":   123.45,
+      "expense":  456.78,
+      "savings":  20.00,
+      "net":     -353.33,
+      "transactionCount": 17
+    },
+    "topCategories": [
+      { "categoryId": 7, "name": "Groceries", "type": "EXPENSE", "amount": 220.00 },
+      ...up to 5 sorted by amount desc
+    ],
+    "daily": [
+      { "date": "2026-05-01", "income": 0, "expense": 12.50, "savings": 0 },
+      ...one row per day in the month
+    ]
+  }
+}
+
+GET /api/v1/reports/yoy?year=YYYY&month=MM
+{
+  "success": true,
+  "data": {
+    "thisYear": { "year": 2026, "month": 5, "totals": {...same shape as summary.totals} },
+    "lastYear": { "year": 2025, "month": 5, "totals": {...} },
+    "deltas": {
+      "income":  { "absolute": 50.00, "percent": 10.0 },
+      "expense": { "absolute": -25.00, "percent": -5.4 },
+      ...
+    },
+    "topCategoryDeltas": [
+      { "categoryId": 7, "name": "Groceries", "thisYear": 220, "lastYear": 180,
+        "absolute": 40, "percent": 22.2 },
+      ...top 5 by absolute delta
+    ]
+  }
+}
+
+GET /api/v1/reports/trends?months=12
+{
+  "success": true,
+  "data": {
+    "monthsBack": 12,
+    "series": [
+      {
+        "categoryId": 7, "name": "Groceries", "type": "EXPENSE",
+        "points": [
+          { "year": 2025, "month": 6, "amount": 180.00 },
+          { "year": 2025, "month": 7, "amount": 195.50 },
+          ...up to 12 most recent months
+        ]
+      },
+      ...one series per category with any activity in the window
+    ]
+  }
+}
+
+GET /api/v1/reports/summary.csv?year=YYYY&month=MM
+- Content-Type: text/csv; charset=utf-8
+- Content-Disposition: attachment; filename="summary-2026-05.csv"
+- Body shape (one section per row group, blank line between):
+    SECTION,VALUE
+    Totals
+    income,123.45
+    expense,456.78
+    ...
+    Top Categories,
+    Groceries,EXPENSE,220.00
+    ...
+    Daily,
+    date,income,expense,savings
+    2026-05-01,0,12.50,0
+    ...
+
+GET /api/v1/reports/summary.pdf?year=YYYY&month=MM
+- Content-Type: application/pdf
+- Content-Disposition: attachment; filename="summary-2026-05.pdf"
+- One-page A4 layout: header (month + user display name), totals card,
+  top-5 categories table, daily bar chart rendered server-side as an SVG
+  embedded in the HTML.
+
+GET /api/v1/reports/transactions.csv?from=YYYY-MM-DD&to=YYYY-MM-DD
+- Content-Type: text/csv; charset=utf-8
+- Body in Slice 7 import format:
+    date,type,amount,category,description
+    2026-05-01,EXPENSE,12.50,Groceries,Coffee
+
+
+--------------------------------------------------------------------------------
+4. FRONTEND CHANGES
+--------------------------------------------------------------------------------
+
+4.1 New /reports route (auth-only). Sidebar entry "Reports" between
+    "Budgets" and "Profile".
+
+4.2 /reports page layout:
+    - Title "Reports", period selector (month + year), three Material tabs:
+        [ Monthly summary | Year-over-year | Category trends ]
+    - The period selector applies to Summary and YoY tabs; Trends has its
+      own selector (6 months / 12 months toggle).
+    - Each tab loads lazily on activation - no unnecessary work for tabs
+      the user does not visit.
+
+4.3 Monthly Summary tab:
+    - 4 stat cards (income, expense, savings, net) reusing Slice 3's
+      StatCardComponent.
+    - Top 5 categories table (name, type chip, amount).
+    - Daily breakdown bar chart (re-uses Slice 3's IncomeExpenseChart
+      with a daily x-axis).
+    - Two buttons at the top right: "Download CSV", "Download PDF".
+
+4.4 Year-over-Year tab:
+    - Two columns: This year vs last year, same period.
+    - Per-row: income / expense / savings / net, with delta (absolute and
+      percentage, with up/down arrow icon and color).
+    - Top-5 category deltas table at the bottom (category, this, last,
+      delta).
+
+4.5 Category Trends tab:
+    - 6 / 12 month toggle.
+    - One line chart per category that had any activity in the window.
+    - Long category list scrolls vertically; charts are uniformly sized.
+
+4.6 Transactions list page (existing):
+    - Add a "Download CSV" button next to the existing "Import CSV" link.
+    - Calls /reports/transactions.csv with the currently active filters
+      (from / to dates).
+
+
+--------------------------------------------------------------------------------
+5. ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+
+AC-10-1   GET /reports/summary?year=2026&month=5 returns totals matching a
+          SUM over transactions for the calling user in that month. Soft-
+          deleted rows are excluded.
+AC-10-2   GET /reports/summary with no transactions in the period returns
+          all-zero totals, empty topCategories, and a daily array of the
+          correct length (one row per day in that month, every value 0).
+AC-10-3   GET /reports/summary in a future month returns zeros without
+          errors.
+AC-10-4   GET /reports/yoy returns thisYear and lastYear blocks for the
+          same month, with deltas computed as (this - last) and
+          (this - last) / last * 100 (percent is null when last is 0).
+AC-10-5   GET /reports/trends?months=6 returns at most 6 monthly points
+          per category, oldest first.
+AC-10-6   GET /reports/trends does NOT include categories with zero
+          activity across the whole window.
+AC-10-7   All /reports/* endpoints reject anonymous calls with 401.
+AC-10-8   All /reports/* endpoints scope by JWT subject - calling with a
+          different user's id in any query parameter must not return that
+          user's data (no such parameter exists; this AC just verifies the
+          scope-by-JWT discipline holds).
+AC-10-9   GET /reports/summary.csv returns text/csv with the documented
+          sections; the body parses back into the same totals when
+          re-read.
+AC-10-10  GET /reports/summary.pdf returns application/pdf with the magic
+          bytes %PDF; the rendered file is non-empty (>= 1 KB) and the
+          Content-Disposition filename matches the requested period.
+AC-10-11  GET /reports/transactions.csv?from=&to= returns rows in the
+          Slice 7 import format such that re-importing the same file is a
+          no-op (modulo trim differences).
+AC-10-12  Frontend /reports page renders the period selector with the
+          current month preselected.
+AC-10-13  Frontend tab switch does not re-fetch the Monthly Summary tab
+          if it has already loaded for the same period.
+AC-10-14  Frontend "Download CSV" / "Download PDF" buttons trigger a file
+          download with the correct filename. (Programmatically: the
+          anchor href / download attribute is set; we do not assert on the
+          actual browser save dialog.)
+AC-10-15  Transactions list "Download CSV" honors the active from/to
+          filters.
+
+
+--------------------------------------------------------------------------------
+6. OUT OF SCOPE (SLICE 10)
+--------------------------------------------------------------------------------
+
+* Arbitrary date ranges for the summary report (use the dashboard; or
+  download the CSV for a custom range via transactions.csv)
+* Multi-currency. Everything is BRL formatted in the PDF, raw decimal in CSV.
+* Email the report. Slice 10 is download-only - delivery is deferred to the
+  SMTP-enabled slice.
+* Configurable PDF templates (header logo, footer, etc.). One template,
+  hard-coded layout.
+* Server-side caching of report results. Each call recomputes from the
+  transactions table. Aggregation is fast for personal-finance data sizes.
+* Scheduled / automatic monthly report emails.
+* Locking / archiving past months (no immutable-by-design concept).
+* Excel-native .xlsx export. CSV opens cleanly in Excel and is enough.
+
+
+================================================================================
+END OF SPEC - Slice 10
+================================================================================

@@ -115,6 +115,22 @@
             <version>5.10</version>
         </dependency>
 
+        <!-- Slice 10: Thymeleaf templates for the PDF report and OpenHTMLtoPDF for rendering -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.openhtmltopdf</groupId>
+            <artifactId>openhtmltopdf-pdfbox</artifactId>
+            <version>1.0.10</version>
+        </dependency>
+        <dependency>
+            <groupId>com.openhtmltopdf</groupId>
+            <artifactId>openhtmltopdf-slf4j</artifactId>
+            <version>1.0.10</version>
+        </dependency>
+
         <!-- JWT signing/parsing -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

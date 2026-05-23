@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8" />
+  <title th:text="'Monthly Summary - ' + ${monthLabel} + ' ' + ${year}">Monthly Summary</title>
+  <style>
+    @page { size: A4; margin: 18mm 16mm; }
+    body { font-family: Helvetica, Arial, sans-serif; color: #1f2937; font-size: 11pt; }
+    h1 { font-size: 20pt; margin: 0 0 4pt 0; letter-spacing: -0.01em; }
+    .subtitle { color: #6b7280; margin: 0 0 18pt 0; font-size: 10pt; }
+    .totals { display: table; width: 100%; border-collapse: separate; border-spacing: 6pt; margin-bottom: 14pt; }
+    .totals-cell {
+      display: table-cell;
+      width: 25%;
+      border: 1px solid #e5e7eb;
+      border-radius: 6pt;
+      padding: 8pt 10pt;
+      vertical-align: top;
+    }
+    .totals-cell .label { font-size: 8pt; color: #6b7280; text-transform: uppercase; letter-spacing: 0.06em; }
+    .totals-cell .value { font-size: 14pt; font-weight: 600; margin-top: 2pt; }
+    .totals-cell.net .value.positive { color: #15803d; }
+    .totals-cell.net .value.negative { color: #b91c1c; }
+    h2 { font-size: 13pt; margin: 12pt 0 6pt 0; font-weight: 600; }
+    table.cats { width: 100%; border-collapse: collapse; }
+    table.cats th, table.cats td { padding: 5pt 8pt; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 10pt; }
+    table.cats th { color: #6b7280; font-weight: 500; }
+    .empty { color: #9ca3af; font-style: italic; padding: 8pt 0; }
+    .chart {
+      border: 1px solid #e5e7eb;
+      border-radius: 6pt;
+      padding: 10pt 12pt;
+      margin-top: 6pt;
+    }
+    .bars { display: table; width: 100%; border-collapse: collapse; }
+    .bar-col {
+      display: table-cell;
+      vertical-align: bottom;
+      text-align: center;
+      width: 3.2%;
+    }
+    .bar-track { height: 60pt; position: relative; }
+    .bar { width: 5pt; margin: 0 auto; display: block; border-radius: 1pt; }
+    .bar.income { background: #15803d; }
+    .bar.expense { background: #b91c1c; }
+    .bar.savings { background: #1d4ed8; }
+    .day-label { font-size: 7pt; color: #6b7280; margin-top: 2pt; }
+    .legend { font-size: 9pt; color: #6b7280; margin-top: 8pt; }
+    .legend span { display: inline-block; margin-right: 12pt; }
+    .legend .swatch { display: inline-block; width: 9pt; height: 9pt; border-radius: 2pt; vertical-align: middle; margin-right: 4pt; }
+    .footer { color: #9ca3af; font-size: 8pt; text-align: right; margin-top: 14pt; border-top: 1px solid #e5e7eb; padding-top: 5pt; }
+  </style>
+</head>
+<body>
+  <h1 th:text="'Monthly Summary - ' + ${monthLabel} + ' ' + ${year}">Monthly Summary</h1>
+  <p class="subtitle" th:text="'Account holder: ' + ${displayName} + ' . ' + ${totals.count} + ' transactions'">Account holder</p>
+
+  <div class="totals">
+    <div class="totals-cell">
+      <div class="label">Income</div>
+      <div class="value" th:text="${totals.income}">R$ 0,00</div>
+    </div>
+    <div class="totals-cell">
+      <div class="label">Expense</div>
+      <div class="value" th:text="${totals.expense}">R$ 0,00</div>
+    </div>
+    <div class="totals-cell">
+      <div class="label">Savings</div>
+      <div class="value" th:text="${totals.savings}">R$ 0,00</div>
+    </div>
+    <div class="totals-cell net">
+      <div class="label">Net</div>
+      <div class="value"
+           th:classappend="${#strings.startsWith(totals.net, 'R$ -')} ? 'negative' : 'positive'"
+           th:text="${totals.net}">R$ 0,00</div>
+    </div>
+  </div>
+
+  <h2>Top categories</h2>
+  <div th:if="${topCategories.empty}" class="empty">No transactions in this period.</div>
+  <table class="cats" th:if="${!topCategories.empty}">
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th>Type</th>
+        <th style="text-align:right;">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr th:each="cat : ${topCategories}">
+        <td th:text="${cat.name}">Name</td>
+        <td th:text="${cat.type}">EXPENSE</td>
+        <td style="text-align:right;" th:text="${cat.amount}">R$ 0,00</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Daily breakdown</h2>
+  <div class="chart">
+    <div class="bars">
+      <div class="bar-col" th:each="b : ${dailyBars}">
+        <div class="bar-track">
+          <span class="bar income" th:style="'height:' + ${b.incomePct} + '%;'"></span>
+          <span class="bar expense" th:style="'height:' + ${b.expensePct} + '%;'"></span>
+          <span class="bar savings" th:style="'height:' + ${b.savingsPct} + '%;'"></span>
+        </div>
+        <div class="day-label" th:text="${b.label}">1</div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="swatch" style="background:#15803d;"></span>Income</span>
+      <span><span class="swatch" style="background:#b91c1c;"></span>Expense</span>
+      <span><span class="swatch" style="background:#1d4ed8;"></span>Savings</span>
+    </div>
+  </div>
+
+  <div class="footer">Generated by Life Organizer</div>
+</body>
+</html>
