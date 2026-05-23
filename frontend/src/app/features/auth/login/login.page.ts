@@ -214,9 +214,15 @@ export class LoginPage {
 
   private messageFor(err: unknown): string {
     if (err instanceof HttpErrorResponse) {
-      const meta = err.error?.meta as { code?: string } | undefined;
+      const meta = err.error?.meta as { code?: string; deletionScheduledAt?: string } | undefined;
       if (meta?.code === ErrorCode.INVALID_CREDENTIALS) {
         return 'Invalid email or password';
+      }
+      if (meta?.code === ErrorCode.ACCOUNT_DELETION_PENDING) {
+        const when = meta.deletionScheduledAt
+          ? ` on ${new Date(meta.deletionScheduledAt).toLocaleDateString()}`
+          : '';
+        return `This account is scheduled for deletion${when}. Open the restore link in your email to keep it.`;
       }
     }
     return 'Could not sign in. Please try again.';

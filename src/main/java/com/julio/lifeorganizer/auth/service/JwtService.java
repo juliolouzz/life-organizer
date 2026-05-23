@@ -29,15 +29,22 @@ public class JwtService {
     public static final String TYP_REFRESH = "refresh";
     public static final String TYP_PASSWORD_RESET = "password_reset";
     public static final String TYP_VERIFY_EMAIL = "verify_email";
+    public static final String TYP_CHANGE_EMAIL = "change_email";
+    public static final String TYP_ACCOUNT_RESTORE = "account_restore";
     public static final String EMAIL_CLAIM = "email";
+    public static final String NEW_EMAIL_CLAIM = "new_email";
     public static final String ROLE_CLAIM = "role";
     // Short fingerprint of the user's current password hash. Embedded in
-    // password-reset tokens so they auto-invalidate after the password is changed.
+    // password-reset, change-email, and account-restore tokens so they
+    // auto-invalidate after the password is changed.
     public static final String PWDV_CLAIM = "pwdv";
 
     // Slice 8 token TTLs (decision 2).
     private static final Duration PASSWORD_RESET_TTL = Duration.ofHours(1);
     private static final Duration VERIFY_EMAIL_TTL = Duration.ofHours(24);
+    // Slice 9 token TTLs (decision 4, 5).
+    private static final Duration CHANGE_EMAIL_TTL = Duration.ofHours(24);
+    private static final Duration ACCOUNT_RESTORE_TTL = Duration.ofDays(30);
 
     private final SecretKey signingKey;
     private final JwtProperties props;
@@ -136,6 +143,43 @@ public class JwtService {
     public Claims parseEmailVerificationToken(String token) {
         Claims claims = parse(token);
         requireTyp(claims, TYP_VERIFY_EMAIL);
+        return claims;
+    }
+
+    public String generateChangeEmailToken(Long userId, String newEmail, String passwordHash) {
+        Instant now = clock.instant();
+        return Jwts.builder()
+                .subject(String.valueOf(userId))
+                .claim(TYP_CLAIM, TYP_CHANGE_EMAIL)
+                .claim(NEW_EMAIL_CLAIM, newEmail)
+                .claim(PWDV_CLAIM, passwordFingerprint(passwordHash))
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plus(CHANGE_EMAIL_TTL)))
+                .signWith(signingKey, Jwts.SIG.HS256)
+                .compact();
+    }
+
+    public Claims parseChangeEmailToken(String token) {
+        Claims claims = parse(token);
+        requireTyp(claims, TYP_CHANGE_EMAIL);
+        return claims;
+    }
+
+    public String generateAccountRestoreToken(Long userId, String passwordHash) {
+        Instant now = clock.instant();
+        return Jwts.builder()
+                .subject(String.valueOf(userId))
+                .claim(TYP_CLAIM, TYP_ACCOUNT_RESTORE)
+                .claim(PWDV_CLAIM, passwordFingerprint(passwordHash))
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plus(ACCOUNT_RESTORE_TTL)))
+                .signWith(signingKey, Jwts.SIG.HS256)
+                .compact();
+    }
+
+    public Claims parseAccountRestoreToken(String token) {
+        Claims claims = parse(token);
+        requireTyp(claims, TYP_ACCOUNT_RESTORE);
         return claims;
     }
 

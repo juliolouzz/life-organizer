@@ -37,6 +37,12 @@ public class UserEntity {
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified;
 
+    // NULL while the account is active. Set to a future timestamp when the user
+    // requests deletion; cleared on restore. The scheduled hard-delete job picks
+    // up rows where this is non-null and in the past.
+    @Column(name = "deletion_scheduled_at")
+    private Instant deletionScheduledAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -90,6 +96,30 @@ public class UserEntity {
 
     public void changePasswordHash(String newHash) {
         this.passwordHash = newHash;
+    }
+
+    public void changeEmail(String newEmail) {
+        this.email = newEmail;
+    }
+
+    public void changeDisplayName(String newDisplayName) {
+        this.displayName = newDisplayName;
+    }
+
+    public Instant getDeletionScheduledAt() {
+        return deletionScheduledAt;
+    }
+
+    public boolean isDeletionPending() {
+        return deletionScheduledAt != null;
+    }
+
+    public void scheduleDeletion(Instant when) {
+        this.deletionScheduledAt = when;
+    }
+
+    public void cancelDeletion() {
+        this.deletionScheduledAt = null;
     }
 
     public Instant getCreatedAt() {

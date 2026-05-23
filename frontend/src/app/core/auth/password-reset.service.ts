@@ -38,4 +38,16 @@ export class PasswordResetService {
       .post<ApiResponse<unknown>>(`${this.base}/auth/resend-verification`, { email }, { context: skipAuth() })
       .pipe(map(() => undefined));
   }
+
+  confirmEmailChange(token: string): Observable<void> {
+    return this.http
+      .post<ApiResponse<unknown>>(`${this.base}/auth/confirm-email-change`, { token }, { context: skipAuth() })
+      .pipe(map(() => undefined));
+  }
+
+  confirmAccountRestore(token: string): Observable<void> {
+    return this.http
+      .post<ApiResponse<unknown>>(`${this.base}/auth/confirm-account-restore`, { token }, { context: skipAuth() })
+      .pipe(map(() => undefined));
+  }
 }
