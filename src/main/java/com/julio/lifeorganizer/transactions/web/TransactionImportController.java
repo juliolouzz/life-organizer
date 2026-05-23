@@ -6,6 +6,7 @@ import com.julio.lifeorganizer.common.exception.UnauthorizedException;
 import com.julio.lifeorganizer.common.exception.ValidationException;
 import com.julio.lifeorganizer.transactions.service.CsvImportService;
 import com.julio.lifeorganizer.transactions.web.dto.ImportResult;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.io.IOException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -18,6 +19,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/v1/transactions")
+@Tag(name = "Transactions Import",
+        description = "Bulk import of transactions from a CSV upload (Slice 7). "
+                + "Accepts ISO or BR-format dates and dot or comma decimals; "
+                + "auto-creates missing categories; returns per-row error reporting.")
 public class TransactionImportController {
 
     private final CsvImportService csvImportService;

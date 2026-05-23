@@ -6,6 +6,7 @@ import com.julio.lifeorganizer.common.exception.UnauthorizedException;
 import com.julio.lifeorganizer.recurring.service.RecurringService;
 import com.julio.lifeorganizer.recurring.web.dto.RecurringRequest;
 import com.julio.lifeorganizer.recurring.web.dto.RecurringResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -22,6 +23,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/recurring")
+@Tag(name = "Recurring Transactions",
+        description = "Recurring transaction templates (Slice 6) that auto-materialise into "
+                + "real transactions on every list call past their due date.")
 public class RecurringController {
 
     private final RecurringService service;

@@ -7,6 +7,7 @@ import com.julio.lifeorganizer.transactions.service.TransactionService;
 import com.julio.lifeorganizer.transactions.web.dto.CreateTransactionRequest;
 import com.julio.lifeorganizer.transactions.web.dto.TransactionResponse;
 import com.julio.lifeorganizer.transactions.web.dto.UpdateTransactionRequest;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.Map;
@@ -26,6 +27,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/transactions")
+@Tag(name = "Transactions",
+        description = "CRUD on the authenticated user's transactions. Soft delete with "
+                + "deleted_at; keyset pagination via cursor + limit; optional from/to filters.")
 public class TransactionController {
 
     private final TransactionService service;

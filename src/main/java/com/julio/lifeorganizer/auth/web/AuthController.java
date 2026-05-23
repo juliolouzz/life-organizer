@@ -13,6 +13,7 @@ import com.julio.lifeorganizer.auth.web.dto.ResetPasswordRequest;
 import com.julio.lifeorganizer.auth.web.dto.UserResponse;
 import com.julio.lifeorganizer.auth.web.dto.VerifyEmailRequest;
 import com.julio.lifeorganizer.common.api.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,6 +24,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/auth")
+@Tag(name = "Auth",
+        description = "Anonymous auth endpoints: register, login, refresh, password reset, "
+                + "email verification, change-email and account-restore confirmation. "
+                + "Most return 200 with an anti-enumeration message regardless of input validity.")
 public class AuthController {
 
     private final AuthService authService;

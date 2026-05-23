@@ -84,6 +84,15 @@ public class SecurityConfig {
                                 "/api/v1/auth/confirm-email-change",
                                 "/api/v1/auth/confirm-account-restore").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // OpenAPI / Swagger UI (springdoc). The spec endpoint
+                        // and the UI assets stay public so operators can browse
+                        // the API without a token; the "Authorize" button on
+                        // the UI lets them paste one and try the secured calls.
+                        .requestMatchers(
+                                "/v3/api-docs",
+                                "/v3/api-docs/**",
+                                "/swagger-ui.html",
+                                "/swagger-ui/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
