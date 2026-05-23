@@ -23,19 +23,30 @@ Java 21 (source) | Spring Boot 3.3.x | PostgreSQL 16 | Flyway | JPA/Hibernate | 
 ### Boot
 
 ```bash
-# 1. copy and fill the env template — JWT_SECRET needs >=32 chars
-cp .env.example .env
+# 1. create a .env file in the project root with the values below.
+#    .env is gitignored - never commit it.
+cat > .env <<'ENV'
+DB_URL=jdbc:postgresql://localhost:5432/life_organizer
+DB_USERNAME=life_organizer
+DB_PASSWORD=life_organizer
+JWT_SECRET=$(openssl rand -base64 48)
+SPRING_PROFILES_ACTIVE=local
+ENV
 
 # 2. start Postgres 16 (named volume; healthcheck included)
 docker compose up -d postgres
 
-# 3. boot the API on :8080
+# 3. load env and boot the API on :8080
+export $(grep -v '^#' .env | xargs)
 mvn spring-boot:run
 
 # 4. sanity check
 curl http://localhost:8080/actuator/health
 # -> {"status":"UP"}
 ```
+
+`JWT_SECRET` **must** be at least 32 characters of high-entropy data — boot fails
+fast otherwise. `openssl rand -base64 48` gives 48 bytes of base64.
 
 ### Run tests
 
