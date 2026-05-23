@@ -72,7 +72,15 @@ public class AuthService {
 
     public AccessTokenResponse refresh(RefreshRequest request) {
         Claims claims = jwtService.parseRefreshToken(request.refreshToken());
-        Long userId = Long.parseLong(claims.getSubject());
+        Long userId;
+        try {
+            userId = Long.parseLong(claims.getSubject());
+        } catch (NumberFormatException ex) {
+            // Token passed signature + typ checks but sub is not a numeric user id.
+            // Treat as invalid rather than letting a NumberFormatException escape.
+            throw new com.julio.lifeorganizer.common.exception.InvalidTokenException(
+                    "Token subject is not a valid user id");
+        }
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(UserNotFoundForTokenException::new);
         String access = jwtService.generateAccessToken(

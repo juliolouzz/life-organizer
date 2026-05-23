@@ -99,12 +99,22 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleFallback(Exception ex, HttpServletRequest req) {
-        log.error("Unhandled exception on {} {}", req.getMethod(), req.getRequestURI(), ex);
+        log.error("Unhandled exception on {} {}", sanitize(req.getMethod()), sanitize(req.getRequestURI()), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error("An unexpected error occurred", "INTERNAL_ERROR"));
     }
 
     private static void warn(HttpServletRequest req, String category, String detail) {
-        log.warn("{} on {} {} :: {}", category, req.getMethod(), req.getRequestURI(), detail);
+        log.warn("{} on {} {} :: {}",
+                category, sanitize(req.getMethod()), sanitize(req.getRequestURI()), sanitize(detail));
+    }
+
+    // Strips CR / LF / TAB from values that flow into log lines to defeat log injection.
+    // An attacker could otherwise craft a URI with %0a to forge fake log entries.
+    private static String sanitize(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        return raw.replace('\n', '_').replace('\r', '_').replace('\t', '_');
     }
 }
