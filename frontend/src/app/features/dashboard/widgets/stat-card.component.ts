@@ -1,6 +1,8 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, Input, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, computed, inject, signal } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
+
+import { AuthService } from '../../../core/auth/auth.service';
 
 import { MoneyBrlPipe } from '../../../shared/pipes/money-brl.pipe';
 
@@ -120,7 +122,8 @@ export class StatCardComponent {
   /** Pre-formatted value (e.g. a percentage). When set, takes precedence over value+sign. */
   @Input() formattedValue: string | null = null;
 
-  private readonly pipe = new MoneyBrlPipe();
+  private readonly auth = inject(AuthService);
+  private readonly pipe = new MoneyBrlPipe(this.auth);
   protected readonly _ = signal(null);
 
   protected rendered = computed<string | null>(() => {
