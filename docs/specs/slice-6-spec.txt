@@ -1,0 +1,76 @@
+================================================================================
+LIFE ORGANIZER - SLICE 6 SPECIFICATION
+================================================================================
+Project       : Life Organizer
+Slice         : 6 - CSV import
+Status        : DRAFT
+Depends on    : Slice 5 (categories as a first-class entity)
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1. WHY
+--------------------------------------------------------------------------------
+
+First-time users have to manually type every past transaction they want to
+look at. That kills adoption. CSV import lets them backfill months or years
+of history in seconds.
+
+
+--------------------------------------------------------------------------------
+2. DECISIONS LEDGER (PROVISIONAL)
+--------------------------------------------------------------------------------
+
+#   Decision
+--- ----------------------------------------------------------------------------
+1   Single endpoint:
+      POST /api/v1/transactions/import    multipart/form-data, key="file"
+    Accepts a UTF-8 CSV file up to 5 MB and ~100k rows.
+2   Expected CSV columns (header row REQUIRED, order can vary):
+      date,amount,type,category,description
+    "type" is INCOME or EXPENSE (case-insensitive).
+    "date" is ISO yyyy-MM-dd or dd/MM/yyyy (Brazilian common format).
+3   Categories that don't exist yet are auto-created (using Slice 5
+   categories table) with kind matching the row's type. Existing categories
+   are matched case-insensitively.
+4   Server returns a parse result, not the created rows:
+      { inserted: 87, skipped: 3, errors: [{ line: 5, message: "amount must be > 0" }] }
+    Errors per-line don't fail the whole upload - good rows still get saved.
+5   Idempotency: an "Idempotency-Key" header (optional) caches the result for
+    1h so accidental re-uploads don't double-insert. Without the header,
+    duplicate detection is by (user_id, date, amount, category, description)
+    natural key.
+6   File is parsed in a streaming way (line-by-line) so a 100k-row file
+    doesn't OOM the JVM. Spring Batch is overkill here; opencsv is enough.
+7   Rate limit: max 5 imports per hour per user (in-memory token bucket).
+
+
+--------------------------------------------------------------------------------
+3. FRONTEND UX
+--------------------------------------------------------------------------------
+
+New page: /transactions/import
+
+1. Drag-and-drop zone OR file picker
+2. Preview first 5 rows (parsed locally for sanity)
+3. Column mapper: if the user's CSV uses different headers, let them pick
+   "which column is the date?"
+4. Submit -> progress bar -> result card showing inserted / skipped / errors
+5. Click an error to see which row failed and why
+6. "Download a template CSV" link to seed the file
+
+
+--------------------------------------------------------------------------------
+4. OUT OF SCOPE
+--------------------------------------------------------------------------------
+
+* Bank-specific OFX import (Nubank, Itau, etc.) - future slice
+* Excel (.xlsx) import - CSV only
+* PDF statement OCR
+* Importing into multiple users at once
+* Async / background processing (Slice 6 is synchronous up to 100k rows)
+
+
+================================================================================
+END OF DRAFT SPEC - Slice 6
+================================================================================

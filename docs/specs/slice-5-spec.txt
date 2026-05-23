@@ -1,0 +1,120 @@
+================================================================================
+LIFE ORGANIZER - SLICE 5 SPECIFICATION
+================================================================================
+Project       : Life Organizer
+Slice         : 5 - Budgets per category + recurring transactions
+Status        : DRAFT - approved for next session
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1. WHY
+--------------------------------------------------------------------------------
+
+The dashboard from Slice 3 answers "what happened?" but not "am I on track?".
+Budgets turn the donut from a report into a guide ("you've used 80% of your
+Groceries budget"). Recurring transactions remove the friction of manually
+re-entering salary / rent / subscriptions every month.
+
+These two features go together because:
+- Categories are the shared dimension (you budget BY category; recurring
+  transactions belong TO a category)
+- Building both at once lets us promote "category" from free-text to a real
+  domain object exactly once instead of twice
+
+
+--------------------------------------------------------------------------------
+2. DECISIONS LEDGER (LOCKED PROVISIONALLY - REVIEW BEFORE BUILDING)
+--------------------------------------------------------------------------------
+
+#   Decision
+--- ----------------------------------------------------------------------------
+1   Categories become a first-class entity:
+      categories(id, user_id, name, kind=INCOME|EXPENSE|BOTH, archived, ...)
+    Existing free-text categories on transactions are migrated by a
+    one-time backfill that creates a Category row per distinct (user, name).
+2   Each user owns their own categories (no global shared list).
+3   Slice 5 transactions UI surfaces an autocomplete with the user's existing
+    categories; new categories created on-the-fly when the user types one
+    that doesn't yet exist.
+4   Budgets are monthly and per-category:
+      budgets(id, user_id, category_id, amount, month, year, ...)
+    A budget covers one calendar month. To budget the same amount every month,
+    the UI sets "repeat monthly" which materialises rows on dashboard load.
+5   Dashboard gets a new "Budgets" widget below the category donut:
+    - one row per active budget for the period
+    - shows "spent / budget" and a progress bar
+    - over-budget rows render in red, on-track rows in green
+6   "All categories" budget shown as a top-line row summing every category
+    budget vs total expenses for the period.
+7   Recurring transactions are stored separately from regular transactions:
+      recurring_transactions(id, user_id, category_id, amount, type, description,
+        frequency=DAILY|WEEKLY|MONTHLY|YEARLY, start_date, end_date|null,
+        last_materialised_at|null, ...)
+    A scheduled job runs once per minute (or once on each request to GET
+    /transactions, whichever the architect picks) and materialises any
+    occurrences whose due date has passed but no transaction has been created.
+8   Materialised transactions point back to the recurring template via a
+    nullable transaction.recurring_id; deleting the recurring template does
+    NOT delete the materialised rows.
+9   Recurring transactions can be edited (changes apply to future occurrences
+    only) or paused (no new occurrences materialised while paused).
+10  Recurring transactions are managed from a new page /recurring, reachable
+    from the sidenav under Transactions.
+
+
+--------------------------------------------------------------------------------
+3. NEW ENDPOINTS (PROVISIONAL)
+--------------------------------------------------------------------------------
+
+Categories
+  GET    /api/v1/categories                       list active categories
+  POST   /api/v1/categories                       create a new category
+  PUT    /api/v1/categories/{id}                  rename or change kind
+  DELETE /api/v1/categories/{id}                  archive (not hard delete)
+
+Budgets
+  GET    /api/v1/budgets?month&year               list budgets for the month
+  POST   /api/v1/budgets                          create a budget
+  PUT    /api/v1/budgets/{id}                     update amount
+  DELETE /api/v1/budgets/{id}                     remove a budget
+
+Recurring
+  GET    /api/v1/recurring                        list active recurring rules
+  POST   /api/v1/recurring                        create a recurring rule
+  PUT    /api/v1/recurring/{id}                   edit (future occurrences only)
+  POST   /api/v1/recurring/{id}/pause             pause materialisation
+  POST   /api/v1/recurring/{id}/resume            resume materialisation
+  DELETE /api/v1/recurring/{id}                   delete the template
+
+Insights additions (read by dashboard widget)
+  GET    /api/v1/insights/budgets?month&year      per-category spent + budget
+
+
+--------------------------------------------------------------------------------
+4. NEW FRONTEND PAGES
+--------------------------------------------------------------------------------
+
+/categories         CRUD page; chip-style cards
+/budgets            CRUD page; one card per month, list of category budgets
+/recurring          CRUD page; cards showing next occurrence + last materialised
+/dashboard          new widget: Budgets vs actual (after category donut)
+                    QuickAdd dialog now uses category autocomplete
+
+
+--------------------------------------------------------------------------------
+5. OUT OF SCOPE (SLICE 5)
+--------------------------------------------------------------------------------
+
+* Yearly / quarterly budgets (monthly only for now)
+* Rolling budgets (e.g., "any unused remains for next month")
+* Budget warnings via email or push notification
+* Recurring intervals other than DAILY/WEEKLY/MONTHLY/YEARLY (no "every 2nd Tuesday")
+* Multi-category transactions (one transaction = one category)
+* Budget templates / starter packs
+* Negotiable categories (no AI suggestions)
+
+
+================================================================================
+END OF DRAFT SPEC - Slice 5
+================================================================================
