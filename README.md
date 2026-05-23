@@ -15,9 +15,11 @@ Personal finance + life management.
 - **Slice 7**: **CSV import** for backfilling transactions — accepts ISO or BR-format dates, dot or comma decimals, optional description column, auto-creates categories, per-row error reporting
 - **Slice 8**: **Auth completeness** — password reset (single-use tokens bound to password fingerprint), non-blocking email verification, in-memory sliding-window rate limit (5 req / 15 min) on every public auth endpoint, anti-enumeration responses, Referrer-Policy: no-referrer, opt-in file delivery for tokens while SMTP is not wired up
 - **Slice 9**: **Account management** — change display name / password / email (typo-safe two-step) and account deletion with a 30-day grace period (soft delete + daily scheduled hard-delete job); deletion gate on login and `JwtAuthenticationFilter`; authenticated and anonymous restore paths
+- **Slice 10**: **Reports & insights** — dedicated `/reports` page with monthly summary, year-over-year comparison, category trends; CSV export (round-trip-safe with Slice 7 import) and PDF export (server-side via OpenHTMLtoPDF + Thymeleaf)
+- **Slice 11**: **Operational hardening** — pluggable `MailService` abstraction (file or SMTP) with HTML+text email for all 4 magic-link flows, `prod` Spring profile with structured JSON logs, non-root alpine Docker image with tini as PID 1, `.env.prod.example` + [deployment guide](docs/deployment.md)
 
 > Behavioural contracts: [`docs/specs/`](docs/specs/) (one `slice-N-spec.txt` per slice)
-> Architectures: `slice-N-architecture.md` (Slices 1-3, 8, 9) under [`docs/specs/`](docs/specs/)
+> Architectures: `slice-N-architecture.md` (Slices 1-3, 8-11) under [`docs/specs/`](docs/specs/)
 > Project rules: [`CLAUDE.md`](CLAUDE.md) · Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## Stack
@@ -222,7 +224,7 @@ features/
 
 ## Status
 
-All 9 slices complete and merged through PRs with green CI + branch protection enforced.
+All 11 slices complete and merged through PRs with green CI + branch protection enforced.
 
 - **Slice 1**: REST API + JWT auth + transactions CRUD ([run evidence](docs/run-evidence.md))
 - **Slice 2**: Angular 17 + Material 3 frontend
@@ -233,8 +235,10 @@ All 9 slices complete and merged through PRs with green CI + branch protection e
 - **Slice 7**: CSV import
 - **Slice 8**: Password reset + email verification + rate limiting
 - **Slice 9**: Account management (display name, password, email, delete with 30-day grace)
+- **Slice 10**: Reports & insights (/reports page + CSV/PDF export)
+- **Slice 11**: Operational hardening (SMTP, prod profile, JSON logs, non-root Docker)
 
-**Numbers**: 77 backend tests + 17 frontend unit tests, JaCoCo ≥80% on service + web packages, ArchUnit layering rules enforced, CodeQL clean (CSRF false positive documented + suppressed), branch protection on `main` requires CI green + no force-pushes.
+**Numbers**: 86 backend tests + 17 frontend unit tests, JaCoCo ≥80% on service + web packages, ArchUnit layering rules enforced, CodeQL clean (CSRF false positive documented + suppressed), branch protection on `main` requires CI green + no force-pushes.
 
 ### Backend ACs
 
@@ -266,16 +270,17 @@ All 9 slices complete and merged through PRs with green CI + branch protection e
 | `v0.7.0` | CSV import |
 | `v0.8.0` | Auth completeness (password reset + email verification + rate limit) |
 | `v0.9.0` | Account management (display name, password, email, delete with grace) |
+| `v0.10.0` | Reports & insights (Summary, YoY, Trends + CSV/PDF export) |
+| `v0.11.0` | Operational hardening (SMTP, prod profile, JSON logs, non-root Docker) |
 
 ## What's next
 
-- **Slice 10** — Reports & insights: monthly summary, year-over-year comparison, category trends, CSV + PDF export
-- **Hosting** — production profile, image registry, deployment guide for Fly.io / Railway, real SMTP delivery
-- **Refresh-token revocation** — `token_version` column so logout-everywhere actually works
-- **Observability** — Micrometer / Prometheus, OpenTelemetry tracing, JSON logs
+- **Refresh-token revocation** — `token_version` column so logout-everywhere actually works; any leaked refresh token can be killed
+- **Observability** — Micrometer / Prometheus, OpenTelemetry tracing, /actuator/metrics exposure
+- **Persistent outbox** — retry SMTP delivery on transient failures; pair with a small jobs framework
 - **Other verticals** — health / fitness, diary, reminders, goals
 
-See [`docs/specs/`](docs/specs/) for behavioural contracts and ADRs.
+See [`docs/specs/`](docs/specs/) for behavioural contracts and ADRs and [`docs/deployment.md`](docs/deployment.md) for the production deployment guide.
 
 ## Development workflow
 

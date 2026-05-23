@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Profile-aware logging setup (Slice 11).
+
+  - Default / local / test profiles: human-readable pattern (inherits the
+    default Spring Boot encoder + the application.yml pattern).
+  - prod profile: structured JSON output via logstash-logback-encoder,
+    one JSON object per line on stdout. Plays nicely with Loki, ELK,
+    Datadog, Fly.io log shipping, etc.
+-->
+<configuration>
+
+    <springProfile name="!prod">
+        <!-- Fall through to the default Spring Boot logger setup driven by
+             application.yml's "logging.pattern.console". This block is a
+             no-op marker so the configuration parses; Spring Boot loads its
+             defaults when no <root> appender is declared. -->
+        <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="prod">
+        <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeMdcKeyName>requestId</includeMdcKeyName>
+                <fieldNames>
+                    <timestamp>@timestamp</timestamp>
+                    <message>message</message>
+                    <thread>thread</thread>
+                    <logger>logger</logger>
+                    <level>level</level>
+                </fieldNames>
+                <customFields>{"service":"life-organizer"}</customFields>
+            </encoder>
+        </appender>
+        <logger name="org.hibernate.SQL" level="WARN"/>
+        <logger name="org.springframework" level="INFO"/>
+        <logger name="com.julio.lifeorganizer" level="INFO"/>
+        <root level="INFO">
+            <appender-ref ref="JSON"/>
+        </root>
+    </springProfile>
+
+</configuration>

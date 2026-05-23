@@ -22,8 +22,8 @@ import com.julio.lifeorganizer.common.exception.InvalidTokenException;
 import com.julio.lifeorganizer.common.exception.UserNotFoundForTokenException;
 import java.time.Clock;
 import java.time.Instant;
-import com.julio.lifeorganizer.config.AuthDevDeliveryProperties;
 import com.julio.lifeorganizer.config.JwtProperties;
+import com.julio.lifeorganizer.mail.MailService;
 import io.jsonwebtoken.Claims;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,20 +55,20 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
-    private final AuthDevDeliveryProperties devDelivery;
+    private final MailService mailService;
     private final Clock clock;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
                        JwtProperties jwtProperties,
-                       AuthDevDeliveryProperties devDelivery,
+                       MailService mailService,
                        Clock clock) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.jwtProperties = jwtProperties;
-        this.devDelivery = devDelivery;
+        this.mailService = mailService;
         this.clock = clock;
     }
 
@@ -85,12 +85,9 @@ public class AuthService {
                 Role.ROLE_USER
         );
         UserEntity saved = userRepository.save(user);
-        // SMTP delivery is deferred. The token is written to the dev-delivery sink
-        // (a local file, opt-in via configuration) instead of logged. Logs record
-        // only that a verification email was issued, not its contents.
         String verifyToken = jwtService.generateEmailVerificationToken(saved.getId());
         log.info("verification email issued for user {} ({})", saved.getId(), saved.getEmail());
-        devDelivery.write("verify-email", saved.getId(), saved.getEmail(),
+        mailService.sendEmailVerification(saved.getEmail(), saved.getDisplayName(),
                 "/verify-email?token=" + verifyToken);
         return UserResponse.from(saved);
     }
@@ -106,7 +103,7 @@ public class AuthService {
         userRepository.findByEmail(email).ifPresentOrElse(user -> {
             String token = jwtService.generatePasswordResetToken(user.getId(), user.getPasswordHash());
             log.info("password reset requested for user {} ({})", user.getId(), user.getEmail());
-            devDelivery.write("reset-password", user.getId(), user.getEmail(),
+            mailService.sendPasswordReset(user.getEmail(), user.getDisplayName(),
                     "/reset-password?token=" + token);
         }, () -> {
             // Burn equivalent CPU so response time matches the happy path and does not
@@ -162,7 +159,7 @@ public class AuthService {
                 .ifPresentOrElse(user -> {
                     String token = jwtService.generateEmailVerificationToken(user.getId());
                     log.info("verification email re-sent for user {} ({})", user.getId(), user.getEmail());
-                    devDelivery.write("verify-email", user.getId(), user.getEmail(),
+                    mailService.sendEmailVerification(user.getEmail(), user.getDisplayName(),
                             "/verify-email?token=" + token);
                 }, () -> jwtService.generateEmailVerificationToken(0L));
     }

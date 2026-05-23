@@ -1,0 +1,34 @@
+# Production overlay over application.yml. Activate with SPRING_PROFILES_ACTIVE=prod.
+# Backed up by .env.prod.example - keep them aligned when you change defaults.
+
+spring:
+  main:
+    banner-mode: off
+  datasource:
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+  jpa:
+    properties:
+      hibernate:
+        format_sql: false
+
+# Hide error internals from clients in production responses.
+server:
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-exception: false
+
+app:
+  mail:
+    provider: smtp
+  auth:
+    dev-delivery:
+      # Disabled in prod regardless of any inherited default. Tokens never
+      # touch the filesystem when SMTP is the delivery channel.
+      enabled: false
+
+# JSON log output. logback-spring.xml switches the appender when this profile is active.
+logging:
+  config: classpath:logback-spring.xml

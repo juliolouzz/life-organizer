@@ -12,7 +12,7 @@ import com.julio.lifeorganizer.common.exception.AccountNotDeletingException;
 import com.julio.lifeorganizer.common.exception.ConflictException;
 import com.julio.lifeorganizer.common.exception.InvalidCredentialsException;
 import com.julio.lifeorganizer.common.exception.NotFoundException;
-import com.julio.lifeorganizer.config.AuthDevDeliveryProperties;
+import com.julio.lifeorganizer.mail.MailService;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -39,18 +39,18 @@ public class AccountService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-    private final AuthDevDeliveryProperties devDelivery;
+    private final MailService mailService;
     private final Clock clock;
 
     public AccountService(UserRepository userRepository,
                           PasswordEncoder passwordEncoder,
                           JwtService jwtService,
-                          AuthDevDeliveryProperties devDelivery,
+                          MailService mailService,
                           Clock clock) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
-        this.devDelivery = devDelivery;
+        this.mailService = mailService;
         this.clock = clock;
     }
 
@@ -88,7 +88,7 @@ public class AccountService {
         String token = jwtService.generateChangeEmailToken(
                 user.getId(), newEmail, user.getPasswordHash());
         log.info("email change requested for user {} to a new address", user.getId());
-        devDelivery.write("change-email", user.getId(), newEmail,
+        mailService.sendEmailChangeConfirmation(newEmail, user.getDisplayName(),
                 "/confirm-email-change?token=" + token);
     }
 
@@ -109,7 +109,7 @@ public class AccountService {
         String token = jwtService.generateAccountRestoreToken(user.getId(), user.getPasswordHash());
         log.warn("account deletion requested for user {} - scheduled at {}",
                 user.getId(), scheduledAt);
-        devDelivery.write("restore-account", user.getId(), user.getEmail(),
+        mailService.sendAccountRestore(user.getEmail(), user.getDisplayName(),
                 "/restore-account?token=" + token);
         return new DeleteAccountResponse(scheduledAt);
     }
