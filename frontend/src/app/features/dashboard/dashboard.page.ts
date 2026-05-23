@@ -2,7 +2,9 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } 
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { forkJoin } from 'rxjs';
 import { Router, RouterLink } from '@angular/router';
 
@@ -21,6 +23,7 @@ import {
 } from './insights.service';
 import { DateRange, PeriodPreset, rangeForPreset, toIso } from './period';
 import { PeriodSelectorComponent } from './period-selector/period-selector.component';
+import { QuickAddTransactionDialog } from './quick-add-dialog/quick-add-transaction.dialog';
 import { Transaction, TransactionsService } from '../transactions/transactions.service';
 
 @Component({
@@ -32,6 +35,7 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
     MatCardModule,
     MatButtonModule,
     MatIconModule,
+    MatTooltipModule,
     PageHeaderComponent,
     EmptyStateComponent,
     StatCardComponent,
@@ -48,6 +52,19 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
     >
       <app-period-selector [initial]="initialPreset" (rangeChange)="onRange($event)" />
     </app-page-header>
+
+    <button
+      mat-fab
+      extended
+      color="primary"
+      class="quick-add-fab"
+      (click)="openQuickAdd()"
+      matTooltip="Add a transaction without leaving this page"
+      data-testid="dashboard-quick-add"
+    >
+      <span class="material-symbols-outlined">add</span>
+      Add transaction
+    </button>
 
     <section class="stats-row">
       <app-stat-card
@@ -159,6 +176,23 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
         gap: 20px;
         margin-bottom: 24px;
       }
+      .quick-add-fab {
+        position: fixed;
+        right: 32px;
+        bottom: 32px;
+        z-index: 50;
+        box-shadow: var(--shadow-lg);
+      }
+      .quick-add-fab .material-symbols-outlined {
+        font-size: 22px;
+        margin-right: 8px;
+      }
+      @media (max-width: 720px) {
+        .quick-add-fab {
+          right: 16px;
+          bottom: 16px;
+        }
+      }
       .recent-section { margin-bottom: 16px; }
       .recent-card {
         padding: 22px 24px;
@@ -220,6 +254,7 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
 export class DashboardPage implements OnInit {
   private readonly insights = inject(InsightsService);
   private readonly txs = inject(TransactionsService);
+  private readonly dialog = inject(MatDialog);
   protected readonly router = inject(Router);
 
   protected readonly initialPreset: PeriodPreset = 'this_month';
@@ -278,6 +313,18 @@ export class DashboardPage implements OnInit {
   protected onRange(range: DateRange): void {
     this.range.set(range);
     this.fetchAll(range);
+  }
+
+  protected openQuickAdd(): void {
+    const ref = this.dialog.open<QuickAddTransactionDialog, void, { created: true } | undefined>(
+      QuickAddTransactionDialog,
+      { width: '440px', autoFocus: 'first-tabbable', restoreFocus: true }
+    );
+    ref.afterClosed().subscribe((result) => {
+      if (result?.created) {
+        this.fetchAll(this.range());
+      }
+    });
   }
 
   private fetchAll(range: DateRange): void {

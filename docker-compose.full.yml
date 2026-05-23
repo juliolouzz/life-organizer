@@ -1,0 +1,69 @@
+# Full-stack Compose: Postgres + Spring Boot backend + nginx-served Angular frontend.
+#
+# Run from the repo root:
+#   docker compose -f docker-compose.full.yml up --build
+#
+# First run takes a few minutes to download base images + Maven + npm deps.
+# Subsequent runs reuse cached layers and start in seconds.
+#
+# Once up, open http://localhost:4200 in a browser.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lifeorg_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: life_organizer
+      POSTGRES_USER: life_organizer
+      POSTGRES_PASSWORD: life_organizer
+    volumes:
+      - lifeorg_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U life_organizer -d life_organizer"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    # Port deliberately not published - only the backend container needs it.
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: life-organizer/backend:0.4
+    container_name: lifeorg_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # No SPRING_PROFILES_ACTIVE: the "local" profile hardcodes localhost which only works
+      # outside containers. application.yml resolves DB_URL from env vars below.
+      DB_URL: jdbc:postgresql://postgres:5432/life_organizer
+      DB_USERNAME: life_organizer
+      DB_PASSWORD: life_organizer
+      # JWT_SECRET must be set in .env. Generate one with: openssl rand -base64 48
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env or your shell - it must be 32+ chars}
+    expose:
+      - "8080"
+    # 8080 is intentionally NOT published to the host - all traffic goes via nginx.
+    # Uncomment the next two lines if you want to hit the API directly from your laptop:
+    # ports:
+    #   - "8080:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: life-organizer/frontend:0.4
+    container_name: lifeorg_frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "4200:80"
+
+volumes:
+  lifeorg_pgdata:

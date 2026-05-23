@@ -24,13 +24,40 @@ Personal finance + life management.
 
 ### Prerequisites
 
-- JDK 21+ (Java 25 also works; source level pinned to 21)
-- Maven 3.9+
-- Node.js 20+
-- Docker Desktop
-- (Optional) `gh` CLI for PR workflows
+**For the Docker route**: only Docker Desktop. Nothing else.
 
-### Boot the backend
+**For manual / development**: JDK 21+, Maven 3.9+, Node.js 20+, Docker Desktop, (optional) `gh` CLI.
+
+### The fastest path: full Docker stack
+
+If you just want to run the whole thing without installing Java or Node:
+
+```bash
+# 1. one-time setup: create .env with a real JWT secret
+cp .env.docker.example .env
+# then edit .env and replace the placeholder JWT_SECRET, or generate one:
+# echo "JWT_SECRET=$(openssl rand -base64 48)" > .env
+
+# 2. build and start everything (Postgres + backend + nginx-served frontend)
+docker compose -f docker-compose.full.yml up --build
+
+# 3. open the app
+open http://localhost:4200
+```
+
+First build takes ~3–5 minutes (downloads JDK 21 + Maven deps + Node + Angular build). Subsequent builds reuse cached layers and finish in seconds.
+
+Stop everything:
+```bash
+docker compose -f docker-compose.full.yml down          # keeps the database
+docker compose -f docker-compose.full.yml down -v       # also wipes the data volume
+```
+
+### Manual / development mode
+
+If you want to iterate on code with hot reload, run the pieces separately:
+
+#### Boot the backend
 
 ```bash
 # 1. create a .env file in the project root (gitignored)
