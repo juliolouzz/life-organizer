@@ -67,6 +67,12 @@ management:
   health:
     db:
       enabled: true
+    # Mail health probe is noisy when SMTP is unconfigured (the default for
+    # personal-use deployments) - it logs a full stack trace on every
+    # /actuator/health hit. Disable it; real SMTP failures still show up in
+    # the application logs when an actual outbound mail is attempted.
+    mail:
+      enabled: false
 
 logging:
   pattern:
