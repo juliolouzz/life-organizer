@@ -1,0 +1,116 @@
+@use '@angular/material' as mat;
+@use '@angular/material-experimental' as matx;
+
+/* Angular Material 17.3 ships Material 3 ("define-theme") via the experimental
+   package. We use matx.define-theme + matx.$m3-*-palette to build the theme;
+   mat.all-component-themes applies it. */
+@include mat.core();
+
+$light-theme: matx.define-theme((
+  color: (
+    theme-type: light,
+    primary: matx.$m3-violet-palette,
+    tertiary: matx.$m3-cyan-palette
+  ),
+  typography: (
+    brand-family: 'Inter, system-ui, sans-serif',
+    plain-family: 'Inter, system-ui, sans-serif'
+  ),
+  density: (scale: 0)
+));
+
+$dark-theme: matx.define-theme((
+  color: (
+    theme-type: dark,
+    primary: matx.$m3-violet-palette,
+    tertiary: matx.$m3-cyan-palette
+  ),
+  typography: (
+    brand-family: 'Inter, system-ui, sans-serif',
+    plain-family: 'Inter, system-ui, sans-serif'
+  ),
+  density: (scale: 0)
+));
+
+html {
+  @include mat.all-component-themes($light-theme);
+  @include matx.color-variants-back-compat($light-theme);
+}
+html.dark {
+  @include mat.all-component-colors($dark-theme);
+  @include matx.color-variants-back-compat($dark-theme);
+}
+
+/* Global design tokens (resolved separately for light/dark via :root + .dark) */
+:root {
+  --surface-bg: #fafafa;
+  --surface-card: #ffffff;
+  --surface-elevated: #ffffff;
+  --text-primary: #18181b;
+  --text-muted: #71717a;
+  --border-subtle: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --money-positive: #15803d;
+  --money-negative: #b91c1c;
+  --focus-ring: rgba(99, 102, 241, 0.4);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  color-scheme: light;
+}
+
+html.dark {
+  --surface-bg: #09090b;
+  --surface-card: #18181b;
+  --surface-elevated: #27272a;
+  --text-primary: #fafafa;
+  --text-muted: #a1a1aa;
+  --border-subtle: #27272a;
+  --border-strong: #3f3f46;
+  --money-positive: #4ade80;
+  --money-negative: #f87171;
+  --focus-ring: rgba(167, 139, 250, 0.5);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  background: var(--surface-bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a { color: inherit; }
+
+.mono, .numeric {
+  font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum', 'zero';
+}
+
+.app-loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
+}
+
+.mat-mdc-form-field { width: 100%; }
+
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.row { display: flex; align-items: center; gap: 12px; }
+.spacer { flex: 1 1 auto; }
