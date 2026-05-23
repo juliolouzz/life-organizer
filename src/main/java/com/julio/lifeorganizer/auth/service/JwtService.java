@@ -38,6 +38,10 @@ public class JwtService {
     // password-reset, change-email, and account-restore tokens so they
     // auto-invalidate after the password is changed.
     public static final String PWDV_CLAIM = "pwdv";
+    // Slice 12: per-user revocation epoch. Every token carries the user's
+    // token_version at issuance. JwtAuthenticationFilter + AuthService.refresh
+    // reject tokens whose tv differs from the user's current value.
+    public static final String TV_CLAIM = "tv";
 
     // Slice 8 token TTLs (decision 2).
     private static final Duration PASSWORD_RESET_TTL = Duration.ofHours(1);
@@ -56,24 +60,26 @@ public class JwtService {
         this.signingKey = Keys.hmacShaKeyFor(props.secret().getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateAccessToken(Long userId, String email, String role) {
+    public String generateAccessToken(Long userId, String email, String role, int tokenVersion) {
         Instant now = clock.instant();
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim(TYP_CLAIM, TYP_ACCESS)
                 .claim(EMAIL_CLAIM, email)
                 .claim(ROLE_CLAIM, role)
+                .claim(TV_CLAIM, tokenVersion)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(props.accessTtl())))
                 .signWith(signingKey, Jwts.SIG.HS256)
                 .compact();
     }
 
-    public String generateRefreshToken(Long userId) {
+    public String generateRefreshToken(Long userId, int tokenVersion) {
         Instant now = clock.instant();
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim(TYP_CLAIM, TYP_REFRESH)
+                .claim(TV_CLAIM, tokenVersion)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(props.refreshTtl())))
                 .signWith(signingKey, Jwts.SIG.HS256)
@@ -111,6 +117,21 @@ public class JwtService {
         Claims claims = parse(token);
         requireTyp(claims, TYP_PASSWORD_RESET);
         return claims;
+    }
+
+    /**
+     * Slice 12: rejects an access or refresh token whose tv claim does not
+     * match the user's current token_version. Called by JwtAuthenticationFilter
+     * and AuthService.refresh after the user row has been loaded.
+     */
+    public void verifyTokenVersion(Claims claims, int currentTokenVersion) {
+        Object tv = claims.get(TV_CLAIM);
+        if (!(tv instanceof Number tokenVersion)) {
+            throw new InvalidTokenException("Token is missing revocation epoch");
+        }
+        if (tokenVersion.intValue() != currentTokenVersion) {
+            throw new InvalidTokenException("Token has been revoked");
+        }
     }
 
     // Throws InvalidTokenException if the token's pwdv claim doesn't match a fingerprint

@@ -267,6 +267,79 @@ class AccountManagementIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void logoutAll_withCorrectPassword_bumpsTokenVersion() throws Exception {
+        int versionBefore = userRepository.findById(userId).orElseThrow().getTokenVersion();
+
+        HttpClient client = HttpClient.newHttpClient();
+        HttpResponse<String> resp = postJsonAuthed(client, "/api/v1/me/sessions/logout-all",
+                Map.of("password", "S3cretValue"));
+        assertThat(resp.statusCode()).isEqualTo(200);
+
+        int versionAfter = userRepository.findById(userId).orElseThrow().getTokenVersion();
+        assertThat(versionAfter).isEqualTo(versionBefore + 1);
+    }
+
+    @Test
+    void logoutAll_wrongPassword_returns401_andDoesNotBump() throws Exception {
+        int versionBefore = userRepository.findById(userId).orElseThrow().getTokenVersion();
+
+        HttpClient client = HttpClient.newHttpClient();
+        HttpResponse<String> resp = postJsonAuthed(client, "/api/v1/me/sessions/logout-all",
+                Map.of("password", "WrongCurrent99"));
+        assertThat(resp.statusCode()).isEqualTo(401);
+        assertThat(json.readTree(resp.body()).get("meta").get("code").asText())
+                .isEqualTo("INVALID_CREDENTIALS");
+
+        int versionAfter = userRepository.findById(userId).orElseThrow().getTokenVersion();
+        assertThat(versionAfter).isEqualTo(versionBefore);
+    }
+
+    @Test
+    void logoutAll_thenSameAccessToken_isRejectedByFilter() throws Exception {
+        HttpClient client = HttpClient.newHttpClient();
+        HttpResponse<String> resp = postJsonAuthed(client, "/api/v1/me/sessions/logout-all",
+                Map.of("password", "S3cretValue"));
+        assertThat(resp.statusCode()).isEqualTo(200);
+
+        // Same access token now stale because tv was bumped.
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/api/v1/me"))
+                .header("Authorization", "Bearer " + accessToken)
+                .GET()
+                .build();
+        HttpResponse<String> me = client.send(req, HttpResponse.BodyHandlers.ofString());
+        assertThat(me.statusCode()).isEqualTo(401);
+        assertThat(json.readTree(me.body()).get("meta").get("code").asText())
+                .isEqualTo("INVALID_TOKEN");
+    }
+
+    @Test
+    void changePassword_invalidatesPriorRefreshToken() throws Exception {
+        // Grab the current refresh token by logging in.
+        String refreshToken = json.readTree(http.postForEntity("/api/v1/auth/login",
+                        Map.of("email", email, "password", "S3cretValue"), String.class).getBody())
+                .get("data").get("refreshToken").asText();
+
+        // Change password (bumps tv).
+        ResponseEntity<String> changed = http.exchange("/api/v1/me/password",
+                HttpMethod.POST,
+                new HttpEntity<>(Map.of(
+                        "currentPassword", "S3cretValue",
+                        "newPassword", "NewS3cret123"),
+                        authHeaders(accessToken)),
+                String.class);
+        assertThat(changed.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        // The old refresh token's tv is now stale.
+        HttpClient client = HttpClient.newHttpClient();
+        HttpResponse<String> refresh = postJson(client, "/api/v1/auth/refresh",
+                Map.of("refreshToken", refreshToken));
+        assertThat(refresh.statusCode()).isEqualTo(401);
+        assertThat(json.readTree(refresh.body()).get("meta").get("code").asText())
+                .isEqualTo("INVALID_TOKEN");
+    }
+
+    @Test
     void hardDeleteJob_removesUsersPastDeadline_andLeavesOthersAlone() {
         // User A: schedule deletion in the past so the job picks them up.
         UserEntity userA = userRepository.findById(userId).orElseThrow();

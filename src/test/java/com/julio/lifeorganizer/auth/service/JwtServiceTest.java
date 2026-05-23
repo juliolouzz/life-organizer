@@ -31,7 +31,7 @@ class JwtServiceTest {
         Instant fixedNow = Instant.parse("2026-05-22T12:00:00Z");
         JwtService svc = newService(Clock.fixed(fixedNow, ZoneOffset.UTC));
 
-        String token = svc.generateAccessToken(42L, "user@example.com", "ROLE_USER");
+        String token = svc.generateAccessToken(42L, "user@example.com", "ROLE_USER", 0);
         Claims claims = svc.parseAccessToken(token);
 
         assertThat(claims.getSubject()).isEqualTo("42");
@@ -46,7 +46,7 @@ class JwtServiceTest {
     @Test
     void parseAccessToken_whenRefreshTokenProvided_throwsInvalidToken() {
         JwtService svc = newService(Clock.systemUTC());
-        String refresh = svc.generateRefreshToken(99L);
+        String refresh = svc.generateRefreshToken(99L, 0);
 
         assertThatThrownBy(() -> svc.parseAccessToken(refresh))
                 .isInstanceOf(InvalidTokenException.class);
@@ -59,7 +59,7 @@ class JwtServiceTest {
         Instant verifyTime = signTime.plus(Duration.ofMinutes(20));
 
         JwtService signer = newService(Clock.fixed(signTime, ZoneOffset.UTC));
-        String token = signer.generateAccessToken(7L, "e", "ROLE_USER");
+        String token = signer.generateAccessToken(7L, "e", "ROLE_USER", 0);
 
         JwtService verifier = newService(Clock.fixed(verifyTime, ZoneOffset.UTC));
         assertThatThrownBy(() -> verifier.parseAccessToken(token))
@@ -73,7 +73,7 @@ class JwtServiceTest {
         Instant verifyTime = signTime.plus(ACCESS_TTL).plusSeconds(15);
 
         JwtService signer = newService(Clock.fixed(signTime, ZoneOffset.UTC));
-        String token = signer.generateAccessToken(7L, "e", "ROLE_USER");
+        String token = signer.generateAccessToken(7L, "e", "ROLE_USER", 0);
 
         JwtService verifier = newService(Clock.fixed(verifyTime, ZoneOffset.UTC));
         assertThat(verifier.parseAccessToken(token).getSubject()).isEqualTo("7");
@@ -82,7 +82,7 @@ class JwtServiceTest {
     @Test
     void parseAccessToken_whenSignedByDifferentSecret_throwsInvalidToken() {
         JwtService legit = newService(Clock.systemUTC());
-        String stolen = legit.generateAccessToken(1L, "e", "ROLE_USER");
+        String stolen = legit.generateAccessToken(1L, "e", "ROLE_USER", 0);
 
         JwtProperties otherProps = new JwtProperties(
                 "completely-different-jwt-secret-also-32+chars-padding",
@@ -96,7 +96,7 @@ class JwtServiceTest {
     @Test
     void parseRefreshToken_whenAccessTokenProvided_throwsInvalidToken() {
         JwtService svc = newService(Clock.systemUTC());
-        String access = svc.generateAccessToken(99L, "e", "ROLE_USER");
+        String access = svc.generateAccessToken(99L, "e", "ROLE_USER", 0);
         assertThatThrownBy(() -> svc.parseRefreshToken(access))
                 .isInstanceOf(InvalidTokenException.class);
     }

@@ -37,7 +37,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/api/v1/auth/confirm-account-restore",
             // Slice 9: sensitive self-service writes
             "/api/v1/me/email",
-            "/api/v1/me/delete");
+            "/api/v1/me/delete",
+            // Slice 12: revocation requires password confirmation, same risk profile
+            "/api/v1/me/sessions/logout-all");
 
     private final RateLimiter limiter;
     private final HandlerExceptionResolver resolver;

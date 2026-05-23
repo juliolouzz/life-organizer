@@ -75,6 +75,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             && user.getDeletionScheduledAt().isAfter(clock.instant())) {
                         throw new AccountDeletionPendingException(user.getDeletionScheduledAt());
                     }
+                    // Slice 12: enforce the revocation epoch. If the user has bumped
+                    // token_version since this access token was minted (via password
+                    // change, password reset, or sign-out-everywhere), the tv claim
+                    // is stale and the request is rejected.
+                    jwtService.verifyTokenVersion(claims, user.getTokenVersion());
                 }
             }
 

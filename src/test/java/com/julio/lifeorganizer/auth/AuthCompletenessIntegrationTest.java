@@ -166,7 +166,7 @@ class AuthCompletenessIntegrationTest extends AbstractIntegrationTest {
                         new HttpEntity<>(authHeaders(accessToken)),
                         String.class).getBody())
                 .get("data").get("id").asLong();
-        String wrongTypeToken = jwtService.generateRefreshToken(userId);
+        String wrongTypeToken = jwtService.generateRefreshToken(userId, 0);
 
         HttpResponse<String> resp = postJson(client, "/api/v1/auth/verify-email",
                 Map.of("token", wrongTypeToken));
