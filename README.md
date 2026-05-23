@@ -14,9 +14,10 @@ Personal finance + life management.
 - **Slice 6**: **Categories** as a first-class entity, **monthly budgets per category** with progress-bar widget on the dashboard, **recurring transactions** with auto-materialisation on every transactions list call
 - **Slice 7**: **CSV import** for backfilling transactions — accepts ISO or BR-format dates, dot or comma decimals, optional description column, auto-creates categories, per-row error reporting
 - **Slice 8**: **Auth completeness** — password reset (single-use tokens bound to password fingerprint), non-blocking email verification, in-memory sliding-window rate limit (5 req / 15 min) on every public auth endpoint, anti-enumeration responses, Referrer-Policy: no-referrer, opt-in file delivery for tokens while SMTP is not wired up
+- **Slice 9**: **Account management** — change display name / password / email (typo-safe two-step) and account deletion with a 30-day grace period (soft delete + daily scheduled hard-delete job); deletion gate on login and `JwtAuthenticationFilter`; authenticated and anonymous restore paths
 
 > Behavioural contracts: [`docs/specs/`](docs/specs/) (one `slice-N-spec.txt` per slice)
-> Architectures: `slice-N-architecture.md` (Slices 1-3, 8) under [`docs/specs/`](docs/specs/)
+> Architectures: `slice-N-architecture.md` (Slices 1-3, 8, 9) under [`docs/specs/`](docs/specs/)
 > Project rules: [`CLAUDE.md`](CLAUDE.md) · Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## Stack
@@ -221,7 +222,7 @@ features/
 
 ## Status
 
-All 8 slices complete and merged through PRs with green CI + branch protection enforced.
+All 9 slices complete and merged through PRs with green CI + branch protection enforced.
 
 - **Slice 1**: REST API + JWT auth + transactions CRUD ([run evidence](docs/run-evidence.md))
 - **Slice 2**: Angular 17 + Material 3 frontend
@@ -231,8 +232,9 @@ All 8 slices complete and merged through PRs with green CI + branch protection e
 - **Slice 6**: Categories + budgets + recurring transactions
 - **Slice 7**: CSV import
 - **Slice 8**: Password reset + email verification + rate limiting
+- **Slice 9**: Account management (display name, password, email, delete with 30-day grace)
 
-**Numbers**: 52 backend tests + 17 frontend unit tests, JaCoCo ≥80% on service + web packages, ArchUnit layering rules enforced, CodeQL clean (CSRF false positive documented + suppressed), branch protection on `main` requires CI green + no force-pushes.
+**Numbers**: 77 backend tests + 17 frontend unit tests, JaCoCo ≥80% on service + web packages, ArchUnit layering rules enforced, CodeQL clean (CSRF false positive documented + suppressed), branch protection on `main` requires CI green + no force-pushes.
 
 ### Backend ACs
 
@@ -263,11 +265,13 @@ All 8 slices complete and merged through PRs with green CI + branch protection e
 | `v0.6.0` | Categories + budgets + recurring |
 | `v0.7.0` | CSV import |
 | `v0.8.0` | Auth completeness (password reset + email verification + rate limit) |
+| `v0.9.0` | Account management (display name, password, email, delete with grace) |
 
 ## What's next
 
-- **Slice 9** — Account management: change password while logged in, change email (re-verifies), edit display name, account deletion (soft -> hard with grace period)
+- **Slice 10** — Reports & insights: monthly summary, year-over-year comparison, category trends, CSV + PDF export
 - **Hosting** — production profile, image registry, deployment guide for Fly.io / Railway, real SMTP delivery
+- **Refresh-token revocation** — `token_version` column so logout-everywhere actually works
 - **Observability** — Micrometer / Prometheus, OpenTelemetry tracing, JSON logs
 - **Other verticals** — health / fitness, diary, reminders, goals
 
