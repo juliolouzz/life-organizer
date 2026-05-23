@@ -25,6 +25,7 @@ import {
 import { DateRange, PeriodPreset, rangeForPreset, toIso } from './period';
 import { PeriodSelectorComponent } from './period-selector/period-selector.component';
 import { QuickAddTransactionDialog } from './quick-add-dialog/quick-add-transaction.dialog';
+import { DeletionPendingBannerComponent } from '../../shared/components/deletion-pending-banner/deletion-pending-banner.component';
 import { VerifyEmailBannerComponent } from '../../shared/components/verify-email-banner/verify-email-banner.component';
 import { Transaction, TransactionsService } from '../transactions/transactions.service';
 
@@ -45,11 +46,13 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
     CategoryDonutComponent,
     BudgetsWidgetComponent,
     VerifyEmailBannerComponent,
+    DeletionPendingBannerComponent,
     PeriodSelectorComponent,
     MoneyBrlPipe
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
+    <app-deletion-pending-banner />
     <app-verify-email-banner />
 
     <app-page-header

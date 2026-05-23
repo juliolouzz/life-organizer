@@ -33,6 +33,27 @@ export const APP_ROUTES: Routes = [
       import('./features/auth/verify-email/verify-email.page').then((m) => m.VerifyEmailPage)
   },
   {
+    path: 'confirm-email-change',
+    loadComponent: () =>
+      import('./features/auth/confirm-email-change/confirm-email-change.page').then(
+        (m) => m.ConfirmEmailChangePage
+      )
+  },
+  {
+    path: 'restore-account',
+    loadComponent: () =>
+      import('./features/auth/restore-account/restore-account.page').then(
+        (m) => m.RestoreAccountPage
+      )
+  },
+  {
+    path: 'deletion-pending',
+    loadComponent: () =>
+      import('./features/auth/deletion-pending/deletion-pending.page').then(
+        (m) => m.DeletionPendingPage
+      )
+  },
+  {
     path: '',
     canActivate: [authGuard],
     loadComponent: () => import('./layout/app-shell.component').then((m) => m.AppShellComponent),

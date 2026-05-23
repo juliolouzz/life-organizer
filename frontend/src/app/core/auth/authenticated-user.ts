@@ -6,4 +6,6 @@ export interface AuthenticatedUser {
   displayName: string;
   role: Role;
   emailVerified?: boolean;
+  /** ISO-8601 instant. Non-null when the account is in the 30-day grace period. */
+  deletionScheduledAt?: string | null;
 }
