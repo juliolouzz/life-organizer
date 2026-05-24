@@ -94,6 +94,30 @@ class AccountManagementIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void patchMe_updatesMonthBoundaryDay_andRoundTripsThroughMe() throws Exception {
+        HttpClient client = HttpClient.newHttpClient();
+        HttpResponse<String> resp = patchJsonAuthed(client, "/api/v1/me",
+                Map.of("displayName", "Cycle", "monthBoundaryDay", 28));
+        assertThat(resp.statusCode()).isEqualTo(200);
+        assertThat(json.readTree(resp.body()).get("data").get("monthBoundaryDay").asInt())
+                .isEqualTo(28);
+
+        ResponseEntity<String> me = http.exchange("/api/v1/me",
+                HttpMethod.GET, new HttpEntity<>(authHeaders(accessToken)), String.class);
+        assertThat(json.readTree(me.getBody()).get("data").get("monthBoundaryDay").asInt())
+                .isEqualTo(28);
+    }
+
+    @Test
+    void patchMe_monthBoundaryDayOutOfRange_returns400() throws Exception {
+        HttpClient client = HttpClient.newHttpClient();
+        HttpResponse<String> resp = patchJsonAuthed(client, "/api/v1/me",
+                Map.of("displayName", "X", "monthBoundaryDay", 32));
+        assertThat(resp.statusCode()).isEqualTo(400);
+        assertThat(json.readTree(resp.body()).get("meta").has("monthBoundaryDay")).isTrue();
+    }
+
+    @Test
     void patchMe_invalidCurrency_returns400() throws Exception {
         HttpClient client = HttpClient.newHttpClient();
         HttpResponse<String> resp = patchJsonAuthed(client, "/api/v1/me",

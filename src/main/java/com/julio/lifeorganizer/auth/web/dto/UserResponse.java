@@ -10,7 +10,8 @@ public record UserResponse(
         String role,
         boolean emailVerified,
         Instant deletionScheduledAt,
-        String currency) {
+        String currency,
+        int monthBoundaryDay) {
 
     public static UserResponse from(UserEntity user) {
         return new UserResponse(
@@ -20,7 +21,8 @@ public record UserResponse(
                 user.getRole().name(),
                 user.isEmailVerified(),
                 user.getDeletionScheduledAt(),
-                user.getCurrency().name()
+                user.getCurrency().name(),
+                user.getMonthBoundaryDay()
         );
     }
 }
