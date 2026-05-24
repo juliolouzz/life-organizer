@@ -19,6 +19,11 @@ import { FormsModule } from '@angular/forms';
 
 import { DateRange, PeriodPreset, rangeForPresetWithBoundary, toIso } from '../period';
 
+export interface PeriodChange {
+  range: DateRange;
+  preset: PeriodPreset;
+}
+
 @Component({
   selector: 'app-period-selector',
   standalone: true,
@@ -130,7 +135,7 @@ export class PeriodSelectorComponent {
    * (regular calendar month) so the component works for anonymous renders.
    */
   @Input() boundaryDay = 1;
-  @Output() rangeChange = new EventEmitter<DateRange>();
+  @Output() rangeChange = new EventEmitter<PeriodChange>();
 
   @ViewChild(MatMenuTrigger) private customMenuTrigger?: MatMenuTrigger;
 
@@ -149,7 +154,7 @@ export class PeriodSelectorComponent {
     this.preset.set(preset);
     const range = rangeForPresetWithBoundary(preset, this.boundaryDay);
     this.activeRange.set(range);
-    this.rangeChange.emit(range);
+    this.rangeChange.emit({ range, preset });
   }
 
   protected isCustomValid(): boolean {
@@ -161,7 +166,7 @@ export class PeriodSelectorComponent {
     const range: DateRange = { from: this.customFrom as Date, to: this.customTo as Date };
     this.preset.set('custom');
     this.activeRange.set(range);
-    this.rangeChange.emit(range);
+    this.rangeChange.emit({ range, preset: 'custom' });
     // Close the menu so the user sees the dashboard update behind it. Without
     // this, the menu stays open (the inner stopPropagation prevents the
     // backdrop-click close path) and the apply feels like a no-op.
