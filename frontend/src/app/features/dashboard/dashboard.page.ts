@@ -1,11 +1,21 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  effect,
+  inject,
+  signal
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { forkJoin } from 'rxjs';
+import { Subject, forkJoin } from 'rxjs';
+import { switchMap, tap } from 'rxjs/operators';
 import { Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../core/auth/auth.service';
@@ -24,7 +34,7 @@ import {
   Summary
 } from './insights.service';
 import { DateRange, PeriodPreset, rangeForPresetWithBoundary, toIso } from './period';
-import { PeriodSelectorComponent } from './period-selector/period-selector.component';
+import { PeriodChange, PeriodSelectorComponent } from './period-selector/period-selector.component';
 import { QuickAddTransactionDialog } from './quick-add-dialog/quick-add-transaction.dialog';
 import { DeletionPendingBannerComponent } from '../../shared/components/deletion-pending-banner/deletion-pending-banner.component';
 import { VerifyEmailBannerComponent } from '../../shared/components/verify-email-banner/verify-email-banner.component';
@@ -63,7 +73,7 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
       <app-period-selector
         [initial]="initialPreset"
         [boundaryDay]="boundaryDay()"
-        (rangeChange)="onRange($event)"
+        (rangeChange)="onPeriodChange($event)"
       />
       <a
         mat-stroked-button
@@ -292,15 +302,20 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
     `
   ]
 })
-export class DashboardPage implements OnInit {
+export class DashboardPage {
   private readonly insights = inject(InsightsService);
   private readonly txs = inject(TransactionsService);
   private readonly dialog = inject(MatDialog);
   private readonly auth = inject(AuthService);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly router = inject(Router);
 
   protected readonly initialPreset: PeriodPreset = 'this_month';
   protected readonly boundaryDay = computed(() => this.auth.currentUser()?.monthBoundaryDay ?? 1);
+
+  // Whether the user has picked a custom range (in which case we DON'T want to
+  // override it when the boundary day finishes loading).
+  private readonly isCustom = signal(false);
 
   protected readonly summary = signal<Summary | null>(null);
   protected readonly categories = signal<CategoryTotal[]>([]);
@@ -311,6 +326,13 @@ export class DashboardPage implements OnInit {
   protected readonly range = signal<DateRange>(
     rangeForPresetWithBoundary('this_month', 1)
   );
+
+  // Single stream of "I want data for this range". Pushed into via fetchAll();
+  // switchMap cancels any in-flight request when a new range arrives, so the
+  // stat cards / chart / donut can never end up showing data from two
+  // different fetches (previously: a slow initial "This month" fetch could
+  // overwrite a fast "Custom" fetch and produce a half-stale UI).
+  private readonly fetchRequest$ = new Subject<DateRange>();
 
   protected readonly bucketsView = computed(() => this.buckets());
 
@@ -350,15 +372,55 @@ export class DashboardPage implements OnInit {
     return this.delta(this.summary()?.totalExpense, this.summary()?.previousPeriod?.totalExpense);
   }
 
-  ngOnInit(): void {
-    // Re-seed the initial range with the (possibly non-default) boundary so
-    // the first fetch already reflects the user's accounting cycle.
-    this.onRange(rangeForPresetWithBoundary(this.initialPreset, this.boundaryDay()));
+  constructor() {
+    // Single subscription for the whole component's lifetime. switchMap
+    // cancels the previous in-flight request whenever a new range arrives.
+    this.fetchRequest$
+      .pipe(
+        tap(() => this.loading.set(true)),
+        switchMap((range) => {
+          const from = toIso(range.from);
+          const to = toIso(range.to);
+          return forkJoin({
+            summary: this.insights.summary(from, to),
+            categories: this.insights.byCategory(from, to),
+            period: this.insights.byPeriod(from, to),
+            recent: this.txs.list({ limit: 5 })
+          });
+        }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
+        next: (res) => {
+          this.summary.set(res.summary);
+          this.categories.set(res.categories);
+          this.buckets.set(res.period.data);
+          this.granularity.set(res.period.granularity);
+          this.recent.set(res.recent.items);
+          this.loading.set(false);
+        },
+        error: () => this.loading.set(false)
+      });
+
+    // When the user's accounting cycle finishes loading (currentUser arrives
+    // after ngOnInit), re-seed the active range from the new boundary - unless
+    // the user has already picked a custom range, in which case we leave it.
+    effect(() => {
+      const day = this.boundaryDay();
+      if (this.isCustom()) return;
+      this.onRange(rangeForPresetWithBoundary(this.initialPreset, day));
+    });
   }
 
-  protected onRange(range: DateRange): void {
+  protected onRange(range: DateRange, custom = false): void {
+    this.isCustom.set(custom);
     this.range.set(range);
-    this.fetchAll(range);
+    this.fetchRequest$.next(range);
+  }
+
+  /** Called by the period selector for both presets and custom apply. */
+  protected onPeriodChange(change: PeriodChange): void {
+    this.onRange(change.range, change.preset === 'custom');
   }
 
   protected openQuickAdd(): void {
@@ -368,30 +430,8 @@ export class DashboardPage implements OnInit {
     );
     ref.afterClosed().subscribe((result) => {
       if (result?.created) {
-        this.fetchAll(this.range());
+        this.fetchRequest$.next(this.range());
       }
-    });
-  }
-
-  private fetchAll(range: DateRange): void {
-    const from = toIso(range.from);
-    const to = toIso(range.to);
-    this.loading.set(true);
-    forkJoin({
-      summary: this.insights.summary(from, to),
-      categories: this.insights.byCategory(from, to),
-      period: this.insights.byPeriod(from, to),
-      recent: this.txs.list({ limit: 5 })
-    }).subscribe({
-      next: (res) => {
-        this.summary.set(res.summary);
-        this.categories.set(res.categories);
-        this.buckets.set(res.period.data);
-        this.granularity.set(res.period.granularity);
-        this.recent.set(res.recent.items);
-        this.loading.set(false);
-      },
-      error: () => this.loading.set(false)
     });
   }
 
