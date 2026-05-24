@@ -12,6 +12,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 
+import { AuthService } from '../../core/auth/auth.service';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog.component';
 import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state.component';
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
@@ -78,7 +79,7 @@ const MONTH_LABELS = [
         </mat-form-field>
         <mat-form-field appearance="outline">
           <mat-label>Monthly limit</mat-label>
-          <span matTextPrefix>R$&nbsp;</span>
+          <span matTextPrefix>{{ currencySymbol() }}&nbsp;</span>
           <input matInput type="number" step="0.01" min="0.01" formControlName="amount" required />
         </mat-form-field>
         <button mat-flat-button color="primary" [disabled]="form.invalid || submitting()">
@@ -203,6 +204,8 @@ export class BudgetsPage implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly snackBar = inject(MatSnackBar);
   private readonly dialog = inject(MatDialog);
+  private readonly auth = inject(AuthService);
+  protected readonly currencySymbol = this.auth.currencySymbol;
 
   protected readonly MONTH_LABELS = MONTH_LABELS;
 
