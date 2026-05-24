@@ -28,9 +28,11 @@ For an as-built reference of the architecture, see [`PROJECT.md`](PROJECT.md).
 14. [Slice 10 - Reports & insights](#14-slice-10---reports--insights)
 15. [Slice 11 - Operational hardening](#15-slice-11---operational-hardening)
 16. [Slice 12 - Refresh-token revocation](#16-slice-12---refresh-token-revocation)
-17. [Cross-cutting habits to build](#17-cross-cutting-habits-to-build)
-18. [Troubleshooting reference](#18-troubleshooting-reference)
-19. [Where to go next](#19-where-to-go-next)
+17. [Slice 13 - Per-user currency](#17-slice-13---per-user-currency)
+18. [Slice 14 - Custom month boundary day](#18-slice-14---custom-month-boundary-day)
+19. [Cross-cutting habits to build](#19-cross-cutting-habits-to-build)
+20. [Troubleshooting reference](#20-troubleshooting-reference)
+21. [Where to go next](#21-where-to-go-next)
 
 ---
 
@@ -74,8 +76,10 @@ A personal-finance app with:
 - **Real email delivery** via SMTP and a fall-back dev sink.
 - **Docker** images and a documented production deployment path.
 
-By the end you'll have ~14k lines of production-quality code, 92 backend
-tests, 17 frontend tests, and a complete OpenAPI specification.
+By the end you'll have ~14k lines of production-quality code, 93 backend
+tests, 34 frontend Jest tests, and a complete OpenAPI specification. Two
+additional slices (per-user currency, custom month boundary day) and a
+multi-round QA pass shipped on top — see [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
@@ -605,7 +609,99 @@ This slice doesn't add user-facing features; it makes the app
 
 ---
 
-## 17. Cross-cutting habits to build
+## 17. Slice 13 - Per-user currency
+
+### Decisions
+
+- **Display-only**, no FX conversion. Switching from BRL to EUR changes the
+  symbol + number formatting; existing transaction amounts keep their stored
+  numeric value. Real multi-currency would need a per-transaction currency
+  column + FX-table — explicitly future work.
+- **One source of truth on the frontend**: `AuthService` exposes
+  `currencySymbol()` + `currencyLocale()` as computed signals derived from
+  `currentUser().currency`. The `MoneyBrlPipe`, stat cards, chart tooltip /
+  axis callbacks, donut tooltip, and every form prefix read those signals
+  so changing currency in /profile propagates live without a reload.
+- **Reactive in Chart.js callbacks** needs care: signal reads inside a
+  callback Angular invokes later (outside its reactive context) are NOT
+  tracked. The chart components hoist the reads to the top of
+  `chartOptions()` so the dependency is registered before the callback is
+  defined. Without this, the chart silently kept the old currency forever.
+- **MoneyBrlPipe is `pure: false`** so a signal change re-triggers
+  `transform()` even when the input amount hasn't changed. Pure pipes cache
+  by input value, which would mask currency switches.
+- **Backend** is minimal: V10 migration adds `users.currency VARCHAR(3) NOT
+  NULL DEFAULT 'BRL'` + a CHECK, plus an optional `currency` field on
+  `UpdateProfileRequest`. The string round-trips through `GET /me`.
+
+### What you learn
+
+- Why pure pipes break reactivity when the dependency lives outside the
+  pipe's inputs.
+- How to use signal-derived `computed` values to keep a global concern
+  (currency, theme) reactive without an event-bus subscription.
+- The trap of "code that reads a signal eventually but not during the
+  effect/render that depends on it" — fix by hoisting the read.
+
+---
+
+## 18. Slice 14 - Custom month boundary day
+
+### Decisions
+
+- **Per-user "month start day"** (1-31). The user's accounting month
+  starts on this day each calendar month. Drives the dashboard
+  "This month" / "Last month" presets and the Budgets widget label.
+- **Previous-anchor semantics**: today = 2026-05-15, boundary = 28
+  → cycle = `[Apr 28, May 27]`. Today = 2026-05-28 → cycle =
+  `[May 28, Jun 25]` (Jun 28 is Sunday → snaps to Fri Jun 26 → cycle
+  ends day before next snap).
+- **Weekend snap**: if the anchor lands on Sat or Sun, snap to the
+  previous Friday. Applied to BOTH the cycle start AND the next cycle's
+  start so cycles partition the timeline with no overlaps or gaps.
+- **Day > last-day-of-month clamping**: 31 in February maps to Feb 28 / 29.
+- **Backend** adds V11 migration: `users.month_boundary_day INTEGER NOT
+  NULL DEFAULT 1` with `CHECK (1..31)`. Default 1 collapses to a regular
+  calendar month — every existing user is backfilled with no behaviour
+  change.
+- **Frontend** keeps the calendar logic in pure functions
+  (`monthRangeForBoundary`, `previousMonthRangeForBoundary`,
+  `rangeForPresetWithBoundary` in `period.ts`) with a unit-test file. The
+  page-level code just passes the user's value in.
+
+### What you learn
+
+- Modelling a domain concept (an "accounting cycle") that doesn't line up
+  with the obvious primitive (calendar month).
+- Why testing date math is annoying: leap days, weekend boundaries, month
+  lengths, clamp-then-snap order. Pure functions + Jest cases keep it
+  manageable.
+- How to retrofit a per-user preference into UI that already shipped:
+  default the new field to the value that preserves the old behaviour,
+  let everything else pull from the same signal.
+
+### QA pass (post-Slice-14)
+
+After Slice 14 we ran a multi-round QA pass on the live Docker stack to
+exercise every visible feature with at least one create / mutate /
+verify cycle. It turned up nine real bugs across the auth flow, the
+reports page, the recurring page, the transactions list, and the
+dashboard. All were fixed TDD-first — the failing test or the live-app
+reproduction was captured before the code change — and merged in PRs
+33-37. See [`CHANGELOG.md`](CHANGELOG.md#unreleased--2026-05-24--post-slice-14-qa-hardening)
+for the full list.
+
+The biggest lesson from that pass:
+
+- **Writing a signal from inside `effect()` throws NG0600 silently** in
+  Angular 17. If you see "the page rendered but no HTTP request fired"
+  with no logged error, suspect an effect that calls a method which
+  internally `.set()`s a signal. Replace with `ngOnInit` + explicit
+  handlers, OR (last resort) opt in with `{ allowSignalWrites: true }`.
+
+---
+
+## 19. Cross-cutting habits to build
 
 These don't belong to any one slice but apply everywhere.
 
@@ -657,24 +753,28 @@ code can be trusting.
 
 ---
 
-## 18. Troubleshooting reference
+## 20. Troubleshooting reference
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Backend won't boot, "JWT_SECRET environment variable is required" | You forgot `.env`. | `cp .env.example .env && openssl rand -base64 48 \| pbcopy` to generate one. |
+| Backend won't boot, "JWT_SECRET environment variable is required" | You forgot `.env`. | `cp .env.docker.example .env && openssl rand -base64 48 \| pbcopy` to generate one. |
 | Backend won't boot, "Could not connect to database" | Postgres isn't running. | `docker compose up -d postgres`. |
 | Frontend `ng build` fails with "Cannot find name X" | Probably a forgotten import. | TypeScript will tell you the file and line; add the missing `import`. |
 | Tests fail randomly, "Connection refused" | Testcontainers can't start a container. | Make sure Docker Desktop is running. |
 | CodeQL flags CSRF disabled | False positive for stateless JWT APIs. | Already suppressed in `.github/codeql/codeql-config.yml` with documented rationale. |
 | "I changed the schema and JPA complains" | You forgot a migration. | Add `V<N+1>__description.sql`; never edit a past migration. |
 | 401 on an endpoint that worked yesterday | Your access token expired. | Refresh, or log in again. |
-| 429 RATE_LIMITED | You hit `/login` / `/forgot-password` more than 5 times in 15 min. | Wait, or in tests set `app.rate-limit.enabled=false`. |
+| 429 RATE_LIMITED on auth endpoints | You hit `/login` / `/forgot-password` more than 5 times in 15 min. | Wait, or in tests set `app.rate-limit.enabled=false`. |
+| PG 500 "could not determine data type of parameter $N" | A JPQL `:foo IS NULL OR ...` against a nullable parameter. | Use `COALESCE(:foo, t.column)` so the column types the bind. See PR #36. |
+| Component spec dies with "Cannot read 'ngModule' of null" | Jest config used the silent-typo `setupFilesAfterEach`. | The valid Jest 29 option is `setupFilesAfterEnv`. |
+| Stat-card value never updates when parent passes new `[value]` | A `computed()` read a plain `@Input` (signals don't track non-signal property reads). | Replace with a method, or convert to signal-inputs (Angular 17+). |
+| Reports / dashboard load but show no data | Possibly an `effect()` calling code that `.set()`s a signal — NG0600 throws silently. | Move the work to `ngOnInit` + explicit handlers, or set `allowSignalWrites: true` on the effect. |
 
 ---
 
-## 19. Where to go next
+## 21. Where to go next
 
-After completing all 12 slices you've built a small but real product. The
+After completing all 14 slices you've built a small but real product. The
 README's "What's next" section lists candidates for future work:
 
 - **Observability** (Micrometer / Prometheus / OpenTelemetry tracing).

@@ -64,9 +64,11 @@ spec/architecture/plan triplet for each slice.
 | Categories | First-class entity per user, auto-created on CSV import |
 | Budgets | Monthly per-category budgets with status (spent / remaining / over) |
 | Recurring transactions | Templates that auto-materialise on every transaction list call |
-| CSV import | Bulk import in ISO or BR date format, dot or comma decimals, per-row error reporting |
-| Dashboard | Stat cards, income/expense/savings chart, category donut, period selector |
+| CSV import | Bulk import in ISO or BR date format, dot or comma decimals, per-row error reporting. **Auto-detects bank-statement format** (`Date, Details, Debit, Credit, Balance`) and maps debit→expense, credit→income, balance-only rows skipped (post-Slice-14 hardening) |
+| Dashboard | Stat cards (Net = Income − Expenses where Expenses includes SAVINGS), income/expense/savings chart, category donut, period selector with built-in presets + custom range, hover tooltips on each stat card |
 | Reports | Monthly summary, year-over-year comparison, 6/12-month category trends |
+| Per-user currency (Slice 13) | Display-only BRL / USD / EUR preference; symbol + locale propagate live via signals to every chart, donut, stat card, form prefix; existing amounts keep their stored value |
+| Custom accounting month (Slice 14) | User-chosen day-of-month (1-31) drives the dashboard "This month" / "Last month" and budgets cycle. Weekend snap to previous Friday; day > last-of-month is clamped |
 | Exports | Summary CSV + summary PDF (Thymeleaf + OpenHTMLtoPDF), transactions CSV (round-trip with import) |
 | Mail delivery | Pluggable provider (file or SMTP), HTML + plain-text alternative, anti-enumeration semantics |
 | OpenAPI / Swagger | Auto-generated docs at `/swagger-ui/index.html`, raw spec at `/v3/api-docs` |
@@ -395,7 +397,7 @@ Build / test / lint commands:
 cd frontend
 npx ng build         # production bundle (Angular's prod config by default)
 npx ng serve         # dev server on :4200 with HMR
-npx jest             # 17 unit tests
+npx jest             # 34 unit tests (Jest 29 + jest-preset-angular)
 npx eslint "src/**/*.{ts,html}"
 ```
 
