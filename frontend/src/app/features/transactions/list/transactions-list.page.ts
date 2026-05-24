@@ -12,7 +12,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import {
   ConfirmDialogComponent,
@@ -308,6 +308,7 @@ export class TransactionsListPage implements OnInit {
   private readonly reportsApi = inject(ReportsService);
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
 
@@ -335,7 +336,28 @@ export class TransactionsListPage implements OnInit {
   }
 
   ngOnInit(): void {
+    // Hydrate the filter from ?from=YYYY-MM-DD&to=YYYY-MM-DD so deep links and
+    // back/forward navigation surface the same range the user (or another
+    // page) sent them here with. Invalid dates fall through to no filter.
+    const qp = this.route.snapshot.queryParamMap;
+    const from = this.parseIsoDate(qp.get('from'));
+    const to = this.parseIsoDate(qp.get('to'));
+    if (from || to) {
+      this.filterForm.patchValue({ from, to });
+    }
     this.fetchInitial();
+  }
+
+  /** Parses YYYY-MM-DD into a local-midnight Date or returns null. */
+  private parseIsoDate(raw: string | null): Date | null {
+    if (!raw) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    if (!m) return null;
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+    const d = new Date(year, month - 1, day);
+    return Number.isNaN(d.getTime()) ? null : d;
   }
 
   protected apply(): void {
