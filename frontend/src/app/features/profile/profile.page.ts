@@ -84,8 +84,8 @@ import { LogoutAllDialogComponent, LogoutAllDialogResult } from './logout-all-di
             </mat-select>
             <mat-hint>Display only - existing transactions keep their stored amount.</mat-hint>
           </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Month boundary day</mat-label>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Month start day</mat-label>
             <input
               matInput
               type="number"
@@ -94,16 +94,17 @@ import { LogoutAllDialogComponent, LogoutAllDialogResult } from './logout-all-di
               formControlName="monthBoundaryDay"
               data-testid="profile-month-boundary-day"
             />
-            <mat-hint>
-              Dashboard "this month" starts on this day each calendar month (1-31).
-              Day 1 = regular calendar months. Day 28 = your month runs Apr 28 - May 27, etc.
-              If the day falls on a weekend, the cycle starts on the previous Friday.
-            </mat-hint>
             @if (profileForm.controls.monthBoundaryDay.hasError('min')
               || profileForm.controls.monthBoundaryDay.hasError('max')) {
               <mat-error>Must be between 1 and 31.</mat-error>
             }
           </mat-form-field>
+          <p class="field-help">
+            The day each calendar month your accounting cycle starts on (1-31).
+            <strong>1</strong> = standard calendar month (May 1 to May 31).
+            <strong>28</strong> = your "May" runs Apr 28 to May 27.
+            If the day lands on a weekend the cycle starts on the previous Friday.
+          </p>
           <button
             mat-flat-button
             color="primary"
@@ -247,7 +248,14 @@ import { LogoutAllDialogComponent, LogoutAllDialogResult } from './logout-all-di
       .logout-btn { flex: 0 0 auto; }
       .stack { display: flex; flex-direction: column; gap: 10px; }
       .stack mat-form-field { width: 100%; }
-      .stack button { align-self: flex-start; }
+      .stack button { align-self: flex-start; margin-top: 4px; }
+      .field-help {
+        margin: -4px 4px 8px 4px;
+        font-size: 0.78rem;
+        line-height: 1.5;
+        color: var(--text-muted);
+      }
+      .field-help strong { color: var(--text-primary); font-weight: 600; }
       .chip-warn {
         background: color-mix(in srgb, #d97706 20%, var(--surface-card));
         color: #d97706;
