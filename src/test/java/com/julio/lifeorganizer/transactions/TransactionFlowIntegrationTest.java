@@ -127,6 +127,53 @@ class TransactionFlowIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void list_withFromAndTo_returnsOnlyRowsInRange() throws Exception {
+        // Three rows on different days so the filter has something to slice.
+        createTx(aliceToken, "EXPENSE", "10.00", "X", "before",      "2026-05-19");
+        createTx(aliceToken, "EXPENSE", "20.00", "X", "inside-low",  "2026-05-20");
+        createTx(aliceToken, "EXPENSE", "30.00", "X", "inside-mid",  "2026-05-21");
+        createTx(aliceToken, "EXPENSE", "40.00", "X", "inside-high", "2026-05-22");
+        createTx(aliceToken, "EXPENSE", "50.00", "X", "after",       "2026-05-23");
+
+        // Repro of the QA-found 500: PostgreSQL couldn't infer the type of
+        // the bind parameter inside "(:from IS NULL OR ...)". The COALESCE
+        // rewrite restores it. Without that rewrite, this call 500s.
+        JsonNode body = json.readTree(httpGet(
+                "/api/v1/transactions?from=2026-05-20&to=2026-05-22", aliceToken).getBody());
+        assertThat(body.get("data").size()).isEqualTo(3);
+        for (JsonNode row : body.get("data")) {
+            String date = row.get("transactionDate").asText();
+            assertThat(date).isBetween("2026-05-20", "2026-05-22");
+        }
+    }
+
+    @Test
+    void list_withFromOnly_returnsRowsFromThatDateForward() throws Exception {
+        createTx(aliceToken, "EXPENSE", "10.00", "X", "before", "2026-05-19");
+        createTx(aliceToken, "EXPENSE", "20.00", "X", "on",     "2026-05-20");
+        createTx(aliceToken, "EXPENSE", "30.00", "X", "after",  "2026-05-21");
+
+        JsonNode body = json.readTree(httpGet(
+                "/api/v1/transactions?from=2026-05-20", aliceToken).getBody());
+        for (JsonNode row : body.get("data")) {
+            assertThat(row.get("transactionDate").asText()).isGreaterThanOrEqualTo("2026-05-20");
+        }
+    }
+
+    @Test
+    void list_withToOnly_returnsRowsUpToThatDate() throws Exception {
+        createTx(aliceToken, "EXPENSE", "10.00", "X", "before", "2026-05-19");
+        createTx(aliceToken, "EXPENSE", "20.00", "X", "on",     "2026-05-20");
+        createTx(aliceToken, "EXPENSE", "30.00", "X", "after",  "2026-05-21");
+
+        JsonNode body = json.readTree(httpGet(
+                "/api/v1/transactions?to=2026-05-20", aliceToken).getBody());
+        for (JsonNode row : body.get("data")) {
+            assertThat(row.get("transactionDate").asText()).isLessThanOrEqualTo("2026-05-20");
+        }
+    }
+
+    @Test
     void put_replacesAllFieldsAndBumpsUpdatedAt_butKeepsId() throws Exception {
         long id = createTx(aliceToken, "EXPENSE", "10.00", "Old", "Old", "2026-05-20");
         Thread.sleep(20); // ensure updatedAt advances on PG resolution

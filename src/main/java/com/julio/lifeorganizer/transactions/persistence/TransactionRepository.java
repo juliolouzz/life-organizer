@@ -13,14 +13,20 @@ import org.springframework.data.repository.query.Param;
 
 public interface TransactionRepository extends JpaRepository<TransactionEntity, Long> {
 
-    // First page (no cursor). Split from the keyset variant because PostgreSQL cannot infer
-    // bind parameter types when all cursor parameters are NULL inside an OR predicate.
+    // First page (no cursor).
+    //
+    // We use COALESCE(:from, t.transactionDate) instead of "(:from IS NULL OR
+    // t.transactionDate >= :from)" because Hibernate sends naked bind
+    // parameters in the "IS NULL" form, and PostgreSQL refuses prepared
+    // statements where it cannot infer the parameter type. COALESCE pins the
+    // type to the column's type, so when the caller passes null the predicate
+    // becomes "t.transactionDate >= t.transactionDate" (always true).
     @Query("""
             SELECT t FROM TransactionEntity t
             WHERE t.userId = :userId
               AND t.deletedAt IS NULL
-              AND (:from IS NULL OR t.transactionDate >= :from)
-              AND (:to   IS NULL OR t.transactionDate <= :to)
+              AND t.transactionDate >= COALESCE(:from, t.transactionDate)
+              AND t.transactionDate <= COALESCE(:to,   t.transactionDate)
             ORDER BY t.transactionDate DESC, t.id DESC
             """)
     List<TransactionEntity> findFirstPage(
@@ -29,13 +35,14 @@ public interface TransactionRepository extends JpaRepository<TransactionEntity, 
             @Param("to") LocalDate to,
             Pageable pageable);
 
-    // Subsequent pages with composite keyset (Amendment 1).
+    // Subsequent pages with composite keyset (Amendment 1). Same COALESCE trick
+    // for nullable from/to; the cursor params are required so they stay as-is.
     @Query("""
             SELECT t FROM TransactionEntity t
             WHERE t.userId = :userId
               AND t.deletedAt IS NULL
-              AND (:from IS NULL OR t.transactionDate >= :from)
-              AND (:to   IS NULL OR t.transactionDate <= :to)
+              AND t.transactionDate >= COALESCE(:from, t.transactionDate)
+              AND t.transactionDate <= COALESCE(:to,   t.transactionDate)
               AND ( t.transactionDate <  :cursorDate
                  OR (t.transactionDate = :cursorDate AND t.id < :cursorId) )
             ORDER BY t.transactionDate DESC, t.id DESC
