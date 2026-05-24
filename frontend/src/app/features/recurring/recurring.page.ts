@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -65,7 +66,7 @@ function toIso(d: Date): string {
         <mat-form-field appearance="outline">
           <mat-label>Category</mat-label>
           <mat-select formControlName="categoryId">
-            @for (c of categories(); track c.id) {
+            @for (c of eligibleCategories(); track c.id) {
               <mat-option [value]="c.id">{{ c.name }}</mat-option>
             }
           </mat-select>
@@ -234,8 +235,36 @@ export class RecurringPage implements OnInit {
     endDate: this.fb.control<Date | null>(null)
   });
 
+  // Reactive view of the selected type so a computed filter can react to
+  // toggle clicks without manually subscribing in component code.
+  private readonly selectedType = toSignal(this.form.controls.type.valueChanges, {
+    initialValue: this.form.controls.type.value
+  });
+
+  /**
+   * Categories visible in the dropdown match the currently selected type.
+   * "BOTH"-kind categories are eligible for any type. Without this filter the
+   * user could pick an INCOME-only category for an EXPENSE rule (or vice
+   * versa) and the backend would reject the create.
+   */
+  protected readonly eligibleCategories = computed(() => {
+    const type = this.selectedType();
+    return this.categories().filter((c) => c.kind === type || c.kind === 'BOTH');
+  });
+
   ngOnInit(): void {
     this.refresh();
+    // When the user switches type, clear any selected categoryId that is no
+    // longer eligible (e.g., "salary" INCOME is selected, then the user
+    // toggles to EXPENSE - the stale selection would otherwise stay).
+    this.form.controls.type.valueChanges.subscribe((type) => {
+      const id = this.form.controls.categoryId.value;
+      if (id == null) return;
+      const stillEligible = this.categories().some(
+        (c) => c.id === id && (c.kind === type || c.kind === 'BOTH')
+      );
+      if (!stillEligible) this.form.controls.categoryId.setValue(null);
+    });
   }
 
   protected submit(): void {
