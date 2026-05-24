@@ -146,6 +146,54 @@ class CsvImportIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void import_bankStatementFormat_mapsDebitAndCredit() throws Exception {
+        // Typical bank export: dd/MM/yyyy dates, Debit=expense, Credit=income,
+        // a balance column that varies per row (carried forward),
+        // and the description in a "Details" column.
+        String csv = """
+                Date,Details,Debit,Credit,Balance
+                24/05/2026,17MAY UBER *ONE ME,0.66,,1960.62
+                24/05/2026,22MAY ALDI 872-054 (,34.53,,
+                21/05/2026,SALARY MAY,,2500.00,
+                """;
+        JsonNode result = upload(csv).get("data");
+        assertThat(result.get("inserted").asInt()).isEqualTo(3);
+        assertThat(result.get("skipped").asInt()).isZero();
+        assertThat(result.get("errors").size()).isZero();
+
+        JsonNode list = json.readTree(http.exchange("/api/v1/transactions?limit=10",
+                HttpMethod.GET, new HttpEntity<>(authHeaders()), String.class).getBody());
+        assertThat(list.get("data").size()).isEqualTo(3);
+    }
+
+    @Test
+    void import_bankStatement_balanceOnlyRowIsSilentlySkipped() throws Exception {
+        // A "carry-forward balance" line has neither debit nor credit. The importer
+        // should skip it without counting it as an error.
+        String csv = """
+                Date,Details,Debit,Credit,Balance
+                24/05/2026,OPENING BALANCE,,,5000.00
+                24/05/2026,COFFEE,4.50,,4995.50
+                """;
+        JsonNode result = upload(csv).get("data");
+        assertThat(result.get("inserted").asInt()).isEqualTo(1);
+        assertThat(result.get("skipped").asInt()).isZero();
+        assertThat(result.get("errors").size()).isZero();
+    }
+
+    @Test
+    void import_bankStatement_rowWithBothDebitAndCredit_isError() throws Exception {
+        String csv = """
+                Date,Details,Debit,Credit
+                24/05/2026,AMBIGUOUS,10.00,5.00
+                """;
+        JsonNode result = upload(csv).get("data");
+        assertThat(result.get("inserted").asInt()).isZero();
+        assertThat(result.get("skipped").asInt()).isEqualTo(1);
+        assertThat(result.get("errors").size()).isEqualTo(1);
+    }
+
+    @Test
     void import_autoCreatesUnknownCategories() throws Exception {
         String csv = """
                 date,amount,type,category,description

@@ -190,14 +190,16 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
         gap: 16px;
-        margin-bottom: 24px;
+        margin-bottom: var(--space-section);
       }
       .charts-row {
         display: grid;
         grid-template-columns: 1.4fr 1fr;
         gap: 20px;
-        margin-bottom: 24px;
+        margin-bottom: var(--space-section);
       }
+      .budgets-section { margin-bottom: var(--space-section); }
+      .recent-section { margin-bottom: var(--space-section); }
       .quick-add-fab {
         position: fixed;
         right: 32px;
@@ -220,7 +222,6 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
         margin-left: 6px;
         vertical-align: middle;
       }
-      .recent-section { margin-bottom: 16px; }
       .recent-card {
         padding: 22px 24px;
         border-radius: var(--radius-md);

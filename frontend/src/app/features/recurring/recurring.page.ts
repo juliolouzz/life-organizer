@@ -168,7 +168,8 @@ function toIso(d: Date): string {
         gap: 12px;
         align-items: start;
       }
-      .form-grid mat-button-toggle-group { grid-column: 1 / -1; }
+      /* Own row, but shrink to fit the three chips (default Material behaviour stretches to fill the cell). */
+      .form-grid mat-button-toggle-group { grid-column: 1 / -1; justify-self: start; width: max-content; }
       .submit-btn { grid-column: 1 / -1; justify-self: end; height: 40px; }
       .grid {
         display: grid;

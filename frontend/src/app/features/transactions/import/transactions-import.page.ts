@@ -43,11 +43,26 @@ const TEMPLATE_CSV =
     <mat-card appearance="outlined" class="upload-card">
       <h3>1. Choose a CSV file</h3>
       <p class="hint">
-        File must have a header row with columns:
-        <code>date</code>, <code>amount</code>, <code>type</code>, <code>category</code>,
-        and optionally <code>description</code>. Dates may be <code>yyyy-MM-dd</code> or
-        <code>dd/MM/yyyy</code>. Type must be <code>INCOME</code>, <code>EXPENSE</code>, or
-        <code>SAVINGS</code>. Categories that don't exist yet are created automatically.
+        Two formats are accepted, auto-detected from the header row.
+      </p>
+      <ul class="hint">
+        <li>
+          <strong>Native</strong>: <code>date</code>, <code>amount</code>, <code>type</code>,
+          <code>category</code>, optional <code>description</code>. Type must be
+          <code>INCOME</code>, <code>EXPENSE</code>, or <code>SAVINGS</code>.
+        </li>
+        <li>
+          <strong>Bank statement</strong>: <code>date</code>, <code>details</code>,
+          <code>debit</code>, <code>credit</code>, <code>balance</code>. Debit rows
+          become expenses, credit rows become income, balance is ignored. Rows
+          with neither debit nor credit set (opening / carry balances) are skipped.
+          Imported rows land under the auto-created <em>Uncategorized</em> category
+          - reclassify them from the transactions list.
+        </li>
+      </ul>
+      <p class="hint">
+        Dates may be <code>yyyy-MM-dd</code> or <code>dd/MM/yyyy</code>. Categories
+        that don't exist yet are created automatically.
       </p>
 
       <div class="file-row">
@@ -150,6 +165,10 @@ const TEMPLATE_CSV =
       }
       h3 { margin: 0 0 8px 0; font-size: 1rem; font-weight: 600; }
       .hint { color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; }
+      ul.hint { margin: 8px 0; padding-left: 22px; }
+      ul.hint li { margin-bottom: 6px; }
+      ul.hint li strong { color: var(--text-primary); font-weight: 600; }
+      ul.hint li em { font-style: normal; font-weight: 500; color: var(--text-primary); }
       .hint code {
         background: var(--surface-bg);
         padding: 1px 6px;
