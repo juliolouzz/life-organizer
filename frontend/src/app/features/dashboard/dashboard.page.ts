@@ -93,6 +93,7 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
       <app-stat-card
         icon="account_balance_wallet"
         label="Net"
+        tooltip="Income minus expenses and savings transfers for the selected period. A positive net means you ended the period with more money than you started; negative means you spent or transferred more than you earned."
         [accent]="netAccent()"
         [value]="summary()?.net ?? null"
         [caption]="periodCaption()"
@@ -102,6 +103,7 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
       <app-stat-card
         icon="trending_up"
         label="Income"
+        tooltip="Sum of all transactions tagged INCOME in the selected period (salary, refunds, gifts received, etc.)."
         accent="var(--money-positive)"
         [value]="summary()?.totalIncome ?? null"
         [caption]="(summary()?.incomeCount ?? 0) + ' transaction(s)'"
@@ -111,6 +113,7 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
       <app-stat-card
         icon="trending_down"
         label="Expenses"
+        tooltip="Sum of all transactions tagged EXPENSE in the selected period (purchases, bills, fees). Does not include savings transfers."
         accent="var(--money-negative)"
         [value]="summary()?.totalExpense ?? null"
         [caption]="(summary()?.expenseCount ?? 0) + ' transaction(s)'"
@@ -120,6 +123,7 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
       <app-stat-card
         icon="savings"
         label="Saved"
+        tooltip="Sum of transfers tagged SAVINGS in the selected period - money moved out of spending and into long-term reserves. Tracked separately from expenses so net = income - expenses - savings."
         accent="#d97706"
         [value]="summary()?.totalSavings ?? null"
         [caption]="(summary()?.savingsCount ?? 0) + ' transfer(s)'"

@@ -1,6 +1,7 @@
 import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input, computed, inject, signal } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { AuthService } from '../../../core/auth/auth.service';
 
@@ -9,10 +10,18 @@ import { MoneyBrlPipe } from '../../../shared/pipes/money-brl.pipe';
 @Component({
   selector: 'app-stat-card',
   standalone: true,
-  imports: [MatCardModule, MoneyBrlPipe, DecimalPipe],
+  imports: [MatCardModule, MatTooltipModule, MoneyBrlPipe, DecimalPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <mat-card class="stat" appearance="outlined" [class.empty]="loading || hidden">
+    <mat-card
+      class="stat"
+      appearance="outlined"
+      [class.empty]="loading || hidden"
+      [matTooltip]="tooltip ?? ''"
+      [matTooltipDisabled]="!tooltip"
+      [matTooltipShowDelay]="2000"
+      matTooltipPosition="above"
+    >
       <div class="head">
         <span class="material-symbols-outlined icon" [style.color]="accent">{{ icon }}</span>
         <small class="label">{{ label }}</small>
@@ -121,6 +130,8 @@ export class StatCardComponent {
   @Input() accent: string = 'var(--text-muted)';
   /** Pre-formatted value (e.g. a percentage). When set, takes precedence over value+sign. */
   @Input() formattedValue: string | null = null;
+  /** Hover explanation; shown after a 2s delay. Omit to disable the tooltip. */
+  @Input() tooltip: string | null = null;
 
   private readonly auth = inject(AuthService);
   private readonly pipe = new MoneyBrlPipe(this.auth);
