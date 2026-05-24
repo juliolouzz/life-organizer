@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -295,7 +295,7 @@ const MONTHS: { value: number; label: string }[] = [
     `
   ]
 })
-export class ReportsPage {
+export class ReportsPage implements OnInit {
   private readonly api = inject(ReportsService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly auth = inject(AuthService);
@@ -308,7 +308,12 @@ export class ReportsPage {
 
   protected readonly tabIndex = signal(0);
   protected get tabIndexProxy(): number { return this.tabIndex(); }
-  protected set tabIndexProxy(value: number) { this.tabIndex.set(value); }
+  // When the user picks a tab, MatTabGroup writes the new index here. Kick
+  // off the matching fetch immediately so the body never renders empty.
+  protected set tabIndexProxy(value: number) {
+    this.tabIndex.set(value);
+    this.loadActive(value, this._period(), this.trendMonths());
+  }
 
   protected readonly summary = signal<SummaryReport | null>(null);
   protected readonly summaryLoading = signal(false);
@@ -332,33 +337,31 @@ export class ReportsPage {
     return max || 1;
   });
 
-  constructor() {
-    // Lazy-load active tab when period or tab changes. Cleared values force a refetch.
-    effect(() => {
-      const tab = this.tabIndex();
-      const period = this._period();
-      const trendMonths = this.trendMonths();
-      if (tab === 0 && this.summary()?.year !== period.year && this.summary()?.month !== period.month) {
-        // Will refetch below
-      }
-      this.loadActive(tab, period, trendMonths);
-    });
+  ngOnInit(): void {
+    // Lazy-load the initially selected tab. Tab changes go through
+    // the tabIndexProxy setter; period changes go through setMonth/setYear.
+    this.loadActive(this.tabIndex(), this._period(), this.trendMonths());
   }
 
   protected setMonth(month: number): void {
     this._period.update((p) => ({ ...p, month }));
     this.invalidateCaches();
+    this.loadActive(this.tabIndex(), this._period(), this.trendMonths());
   }
 
   protected setYear(year: number): void {
     this._period.update((p) => ({ ...p, year }));
     this.invalidateCaches();
+    this.loadActive(this.tabIndex(), this._period(), this.trendMonths());
   }
 
   protected setTrendMonths(months: 6 | 12): void {
     if (months === this.trendMonths()) return;
     this.trendMonths.set(months);
     this.trends.set(null);
+    if (this.tabIndex() === 2) {
+      this.loadActive(this.tabIndex(), this._period(), months);
+    }
   }
 
   protected downloadCsv(): void {
