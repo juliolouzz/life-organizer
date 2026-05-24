@@ -84,6 +84,26 @@ import { LogoutAllDialogComponent, LogoutAllDialogResult } from './logout-all-di
             </mat-select>
             <mat-hint>Display only - existing transactions keep their stored amount.</mat-hint>
           </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Month boundary day</mat-label>
+            <input
+              matInput
+              type="number"
+              min="1"
+              max="31"
+              formControlName="monthBoundaryDay"
+              data-testid="profile-month-boundary-day"
+            />
+            <mat-hint>
+              Dashboard "this month" starts on this day each calendar month (1-31).
+              Day 1 = regular calendar months. Day 28 = your month runs Apr 28 - May 27, etc.
+              If the day falls on a weekend, the cycle starts on the previous Friday.
+            </mat-hint>
+            @if (profileForm.controls.monthBoundaryDay.hasError('min')
+              || profileForm.controls.monthBoundaryDay.hasError('max')) {
+              <mat-error>Must be between 1 and 31.</mat-error>
+            }
+          </mat-form-field>
           <button
             mat-flat-button
             color="primary"
@@ -271,7 +291,8 @@ export class ProfilePage implements OnInit {
 
   protected readonly profileForm = this.fb.nonNullable.group({
     displayName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
-    currency: ['BRL' as 'BRL' | 'USD' | 'EUR', [Validators.required]]
+    currency: ['BRL' as 'BRL' | 'USD' | 'EUR', [Validators.required]],
+    monthBoundaryDay: [1, [Validators.required, Validators.min(1), Validators.max(31)]]
   });
 
   protected readonly passwordForm = this.fb.nonNullable.group({
@@ -308,8 +329,12 @@ export class ProfilePage implements OnInit {
   protected saveProfile(): void {
     if (this.profileForm.invalid || this.profileSubmitting()) return;
     this.profileSubmitting.set(true);
-    const { displayName, currency } = this.profileForm.getRawValue();
-    this.accountService.updateProfile({ displayName: displayName.trim(), currency })
+    const { displayName, currency, monthBoundaryDay } = this.profileForm.getRawValue();
+    this.accountService.updateProfile({
+      displayName: displayName.trim(),
+      currency,
+      monthBoundaryDay
+    })
       .subscribe({
         next: () => {
           this.profileSubmitting.set(false);
@@ -432,6 +457,7 @@ export class ProfilePage implements OnInit {
     if (u) {
       this.profileForm.controls.displayName.setValue(u.displayName);
       this.profileForm.controls.currency.setValue(u.currency ?? 'BRL');
+      this.profileForm.controls.monthBoundaryDay.setValue(u.monthBoundaryDay ?? 1);
     }
   }
 

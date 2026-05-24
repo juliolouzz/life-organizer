@@ -12,6 +12,8 @@ export interface UpdateProfilePayload {
   displayName: string;
   /** Slice 13: BRL / USD / EUR. */
   currency?: 'BRL' | 'USD' | 'EUR';
+  /** Slice 14: anchor day for the user's accounting month (1-31). */
+  monthBoundaryDay?: number;
 }
 
 export interface ChangePasswordPayload {

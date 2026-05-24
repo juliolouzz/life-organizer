@@ -6,6 +6,7 @@ import { RouterLink } from '@angular/router';
 
 import { MoneyBrlPipe } from '../../../shared/pipes/money-brl.pipe';
 import { BudgetStatusItem, BudgetsService } from '../../budgets/budgets.service';
+import { monthRangeForBoundary, toIso } from '../period';
 
 @Component({
   selector: 'app-budgets-widget',
@@ -135,6 +136,8 @@ import { BudgetStatusItem, BudgetsService } from '../../budgets/budgets.service'
 export class BudgetsWidgetComponent implements OnChanges {
   @Input() year!: number;
   @Input() month!: number;
+  /** Slice 14: when > 1, show the cycle range alongside the calendar month label. */
+  @Input() boundaryDay = 1;
 
   private readonly api = inject(BudgetsService);
   protected readonly status = signal<BudgetStatusItem[]>([]);
@@ -145,7 +148,14 @@ export class BudgetsWidgetComponent implements OnChanges {
   ];
 
   protected monthLabel(): string {
-    return `${BudgetsWidgetComponent.MONTHS[(this.month ?? 1) - 1]} ${this.year ?? ''}`;
+    const base = `${BudgetsWidgetComponent.MONTHS[(this.month ?? 1) - 1]} ${this.year ?? ''}`;
+    if (!this.boundaryDay || this.boundaryDay === 1) return base;
+    // The "current cycle" is anchored at boundaryDay relative to a reference
+    // date inside the selected calendar month. Use mid-month so we always
+    // land on the cycle that "owns" that calendar month.
+    const ref = new Date(this.year, (this.month ?? 1) - 1, 15);
+    const cycle = monthRangeForBoundary(ref, this.boundaryDay);
+    return `${base} (${toIso(cycle.from)} - ${toIso(cycle.to)})`;
   }
 
   protected capped(p: number): number { return Math.min(100, Math.max(0, p)); }

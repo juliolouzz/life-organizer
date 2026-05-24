@@ -45,6 +45,13 @@ public class UserEntity {
     @Column(name = "currency", nullable = false, length = 3)
     private Currency currency = Currency.BRL;
 
+    // Slice 14: day of the calendar month that anchors the user's accounting
+    // month. 1 = "regular calendar month" (default); 28 = "month runs from the
+    // 28th of the previous calendar month to the 27th of the current one".
+    // Clamped to last-day-of-month in the front-end for short months.
+    @Column(name = "month_boundary_day", nullable = false)
+    private int monthBoundaryDay = 1;
+
     // Slice 12: revocation epoch. Every issued JWT carries this value as the
     // "tv" claim; a bump invalidates every prior token for this user.
     @Column(name = "token_version", nullable = false)
@@ -135,6 +142,17 @@ public class UserEntity {
         if (newCurrency != null) {
             this.currency = newCurrency;
         }
+    }
+
+    public int getMonthBoundaryDay() {
+        return monthBoundaryDay;
+    }
+
+    public void changeMonthBoundaryDay(int day) {
+        if (day < 1 || day > 31) {
+            throw new IllegalArgumentException("monthBoundaryDay must be between 1 and 31");
+        }
+        this.monthBoundaryDay = day;
     }
 
     public Instant getDeletionScheduledAt() {

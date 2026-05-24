@@ -8,6 +8,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { forkJoin } from 'rxjs';
 import { Router, RouterLink } from '@angular/router';
 
+import { AuthService } from '../../core/auth/auth.service';
 import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state.component';
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
 import { MoneyBrlPipe } from '../../shared/pipes/money-brl.pipe';
@@ -22,7 +23,7 @@ import {
   InsightsService,
   Summary
 } from './insights.service';
-import { DateRange, PeriodPreset, rangeForPreset, toIso } from './period';
+import { DateRange, PeriodPreset, rangeForPresetWithBoundary, toIso } from './period';
 import { PeriodSelectorComponent } from './period-selector/period-selector.component';
 import { QuickAddTransactionDialog } from './quick-add-dialog/quick-add-transaction.dialog';
 import { DeletionPendingBannerComponent } from '../../shared/components/deletion-pending-banner/deletion-pending-banner.component';
@@ -59,7 +60,11 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
       title="Dashboard"
       subtitle="How your money moved this period."
     >
-      <app-period-selector [initial]="initialPreset" (rangeChange)="onRange($event)" />
+      <app-period-selector
+        [initial]="initialPreset"
+        [boundaryDay]="boundaryDay()"
+        (rangeChange)="onRange($event)"
+      />
       <a
         mat-stroked-button
         routerLink="/transactions"
@@ -144,7 +149,11 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
       </section>
 
       <section class="budgets-section">
-        <app-budgets-widget [year]="currentYear()" [month]="currentMonth()" />
+        <app-budgets-widget
+          [year]="currentYear()"
+          [month]="currentMonth()"
+          [boundaryDay]="boundaryDay()"
+        />
       </section>
 
       <section class="recent-section">
@@ -283,9 +292,11 @@ export class DashboardPage implements OnInit {
   private readonly insights = inject(InsightsService);
   private readonly txs = inject(TransactionsService);
   private readonly dialog = inject(MatDialog);
+  private readonly auth = inject(AuthService);
   protected readonly router = inject(Router);
 
   protected readonly initialPreset: PeriodPreset = 'this_month';
+  protected readonly boundaryDay = computed(() => this.auth.currentUser()?.monthBoundaryDay ?? 1);
 
   protected readonly summary = signal<Summary | null>(null);
   protected readonly categories = signal<CategoryTotal[]>([]);
@@ -293,7 +304,9 @@ export class DashboardPage implements OnInit {
   protected readonly granularity = signal<Granularity>('DAY');
   protected readonly recent = signal<Transaction[]>([]);
   protected readonly loading = signal(true);
-  protected readonly range = signal<DateRange>(rangeForPreset('this_month'));
+  protected readonly range = signal<DateRange>(
+    rangeForPresetWithBoundary('this_month', 1)
+  );
 
   protected readonly bucketsView = computed(() => this.buckets());
 
@@ -334,7 +347,9 @@ export class DashboardPage implements OnInit {
   }
 
   ngOnInit(): void {
-    this.onRange(this.range());
+    // Re-seed the initial range with the (possibly non-default) boundary so
+    // the first fetch already reflects the user's accounting cycle.
+    this.onRange(rangeForPresetWithBoundary(this.initialPreset, this.boundaryDay()));
   }
 
   protected onRange(range: DateRange): void {

@@ -62,6 +62,9 @@ public class AccountService {
             user.changeCurrency(com.julio.lifeorganizer.auth.domain.Currency
                     .parseOrDefault(request.currency()));
         }
+        if (request.monthBoundaryDay() != null) {
+            user.changeMonthBoundaryDay(request.monthBoundaryDay());
+        }
         return UserResponse.from(userRepository.save(user));
     }
 
