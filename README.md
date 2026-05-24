@@ -18,6 +18,9 @@ Personal finance + life management.
 - **Slice 10**: **Reports & insights** — dedicated `/reports` page with monthly summary, year-over-year comparison, category trends; CSV export (round-trip-safe with Slice 7 import) and PDF export (server-side via OpenHTMLtoPDF + Thymeleaf)
 - **Slice 11**: **Operational hardening** — pluggable `MailService` abstraction (file or SMTP) with HTML+text email for all 4 magic-link flows, `prod` Spring profile with structured JSON logs, non-root alpine Docker image with tini as PID 1, `.env.prod.example` + [deployment guide](docs/deployment.md)
 - **Slice 12**: **Refresh-token revocation** — per-user `token_version` epoch with a `tv` claim on every JWT; `POST /me/sessions/logout-all` bumps the epoch (password-confirmed, rate-limited); password change AND password reset auto-bump so a leaked refresh token cannot outlive credential rotation
+- **Slice 13**: **Per-user currency** (BRL / USD / EUR) — display-only preference on the profile (no FX conversion); symbol + locale propagate live to every chart, donut, stat card, form prefix and recurring / budget input via signals; existing transactions keep their stored amount
+- **Slice 14**: **Custom month boundary** — pick the day-of-month (1-31) your accounting cycle starts on; dashboard "This month" / "Last month" + budgets widget label follow that cycle. Weekend snap (Sat/Sun → previous Friday); day > last-day-of-month is clamped
+- **QA hardening (post-14)**: CSV bank-statement format (auto-detect Date / Details / Debit / Credit / Balance, debit→expense, credit→income, balance ignored, opening-balance rows skipped); `authGuard` preserves the requested URL via `?returnUrl=`; `APP_INITIALIZER` revives the session from the refresh token on hard reload; transactions filter accepts `from` / `to` URL params on deep-link and the JPQL avoids the PostgreSQL "could not determine parameter type" footgun
 - **Tooling**: **OpenAPI / Swagger UI** at `/swagger-ui/index.html` with a Bearer "Authorize" button so operators can try every endpoint from the browser; raw spec at `/v3/api-docs`
 
 > [`TUTORIAL.md`](TUTORIAL.md) - end-to-end build-it-yourself guide for someone learning to code · [`PROJECT.md`](PROJECT.md) - as-built reference (architecture, decisions, risk register)
@@ -227,7 +230,7 @@ features/
 
 ## Status
 
-All 12 slices complete and merged through PRs with green CI + branch protection enforced.
+All 14 slices complete and merged through PRs with green CI + branch protection enforced.
 
 - **Slice 1**: REST API + JWT auth + transactions CRUD ([run evidence](docs/run-evidence.md))
 - **Slice 2**: Angular 17 + Material 3 frontend
@@ -241,9 +244,12 @@ All 12 slices complete and merged through PRs with green CI + branch protection 
 - **Slice 10**: Reports & insights (/reports page + CSV/PDF export)
 - **Slice 11**: Operational hardening (SMTP, prod profile, JSON logs, non-root Docker)
 - **Slice 12**: Refresh-token revocation (per-user epoch, sign out everywhere)
+- **Slice 13**: Per-user currency (BRL / USD / EUR, display-only)
+- **Slice 14**: Custom month boundary day (1-31, weekend snap, drives dashboard + budgets cycle)
+- **QA hardening (post-14)**: CSV bank-statement format; auth `returnUrl` + hard-reload session recovery; transactions filter URL params + PG JPQL fix; multi-round QA pass with 9 live-verified bug fixes
 - **Tooling**: OpenAPI / Swagger UI
 
-**Numbers**: 92 backend tests + 17 frontend unit tests, JaCoCo ≥80% on service + web packages, ArchUnit layering rules enforced, CodeQL clean (CSRF false positive documented + suppressed), branch protection on `main` requires CI green + no force-pushes.
+**Numbers**: 93 backend tests + 34 frontend Jest tests, JaCoCo ≥80% on service + web packages, ArchUnit layering rules enforced, CodeQL clean (CSRF false positive documented + suppressed), branch protection on `main` requires CI green + no force-pushes.
 
 ### Backend ACs
 
@@ -278,6 +284,8 @@ All 12 slices complete and merged through PRs with green CI + branch protection 
 | `v0.10.0` | Reports & insights (Summary, YoY, Trends + CSV/PDF export) |
 | `v0.11.0` | Operational hardening (SMTP, prod profile, JSON logs, non-root Docker) |
 | `v0.12.0` | Refresh-token revocation (per-user epoch, sign out everywhere) |
+| `v0.13.0` | Per-user currency selection (BRL / USD / EUR) |
+| `v0.14.0` | Custom month boundary day + post-14 QA hardening |
 
 ## What's next
 

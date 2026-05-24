@@ -5,21 +5,16 @@ Personal learning project for `julio.cdl.vet@gmail.com`. This file is the canoni
 ## Identity
 
 - **Project name**: Life Organizer
-- **Current slice**: Slice 1 — Users + JWT auth + Transactions CRUD
-- **Stack**: Java 21 (source level) · Spring Boot 3.3.x · PostgreSQL 16 · Flyway · JPA/Hibernate · JUnit 5 · Mockito · Testcontainers · Maven · Docker Compose
-- **Domain**: Personal finance vertical first (transactions). Future verticals (health, diary, dashboard) are deferred per spec §9.
+- **Status**: Slices 1-14 shipped (REST API, Angular UI, dashboard, categories / budgets / recurring, CSV import, password reset / email verification / rate limit, account management, reports, ops hardening, refresh-token revocation, per-user currency, custom month boundary day). Most recently: a multi-round QA pass closed out 9 live-verified bugs (PRs 33-37).
+- **Current focus**: post-Slice-14 maintenance — fix bugs surfaced by QA, keep the docs and CHANGELOG in step with `main`, deepen test coverage where regressions land.
+- **Stack**: Java 21 (source level) · Spring Boot 3.3.x · PostgreSQL 16 · Flyway · JPA/Hibernate · JUnit 5 · Mockito · Testcontainers · Maven · Docker Compose · Angular 17 · TypeScript strict · Material 17 (M3) · Jest · Playwright
+- **Domain**: Personal finance vertical first (transactions). Other verticals (health, diary, reminders, goals) are still future work — see the "What's next" section at the bottom of [`README.md`](README.md).
 
 ## Source of Truth
 
-The behavioral contract for Slice 1 lives in `docs/specs/`:
+Per-slice behavioural contracts live in [`docs/specs/`](docs/specs/). Each slice ships its own `slice-N-spec.txt` (decisions ledger, data model, endpoints, acceptance criteria) and most have `slice-N-architecture.md` (ADRs, package tree, dependency diagram, risk register) + `slice-N-plan.md` (TDD-sized implementation steps). For the latest slice listing and tags see [`CHANGELOG.md`](CHANGELOG.md) and [`README.md`](README.md).
 
-| File | Purpose |
-|---|---|
-| `slice-1-spec.txt` | Behavioral specification — decisions ledger, data model, endpoints, acceptance criteria. Amendments tracked at the bottom. |
-| `slice-1-architecture.md` | 14 Architecture Decision Records (ADRs), package tree, dependency diagram, filter chain order, risk register. |
-| `slice-1-plan.md` | 77-step TDD-sized implementation plan across 8 phases. Every Acceptance Criterion maps to at least one step. |
-
-**Never write code that contradicts the spec. If the spec needs to change, amend it (with reason + date) before changing code.**
+**Never write code that contradicts a spec. If the spec needs to change, amend it (with reason + date) before changing code.** When fixing a QA-found bug, write a failing test first that pins the corrected contract.
 
 ## Module Layout
 
@@ -94,36 +89,45 @@ Run:
 ## Quick Start
 
 ```bash
-cp .env.example .env             # then fill JWT_SECRET with >=32 chars
-docker compose up -d postgres    # boots Postgres 16 with healthcheck
-mvn spring-boot:run              # boots the API on :8080
-curl http://localhost:8080/actuator/health
+cp .env.docker.example .env      # fill JWT_SECRET with >=32 chars (openssl rand -base64 48)
+docker compose -f docker-compose.full.yml up --build   # postgres + backend + nginx-frontend
+open http://localhost:4200       # SPA; backend lives on the internal Docker network
 ```
+
+For development mode (hot reload, native JDK + node) see the "Manual / development mode" section of [`README.md`](README.md).
 
 ## When You Hit a Blocker
 
-1. Re-read the spec — most ambiguity is resolved there.
-2. Check the relevant ADR in `docs/specs/slice-1-architecture.md`.
+1. Re-read the relevant `slice-N-spec.txt`.
+2. Check the matching `slice-N-architecture.md` for ADRs and risk notes.
 3. If still unclear, **stop and ask** — do not guess.
 4. If the spec or ADR is wrong, amend it (with date + reason) before touching code.
 
-## Out of Scope for Slice 1
+## Still out of scope
 
-Per spec §9 — do **not** implement these in Slice 1, even if asked:
+Already shipped (do NOT treat these as "out of scope" anymore):
 
-- Email verification, password reset, account deletion
-- Lockout / rate limiting / captcha
-- Refresh-token rotation or server-side revocation
-- Multi-currency, FX, account/wallet entities
-- List filters beyond `from`/`to`
-- PATCH endpoints (PUT only, full replace)
-- Hard delete or undelete
-- Idempotency keys, optimistic locking, audit columns
-- Reports, dashboards, recurring transactions, budgets, alerts
-- File uploads, bulk import, webhooks
-- Prod profile, CI/CD pipeline, K8s manifests
-- Frontend (UI is a future slice — current slice is API-only)
-- Health, diary, reminders verticals — future slices
+- Email verification, password reset, account deletion (Slices 8-9)
+- In-memory sliding-window rate limit on public auth endpoints (Slice 8)
+- Refresh-token server-side revocation via per-user epoch (Slice 12)
+- Per-user currency preference (Slice 13)
+- PATCH endpoint for /me (Slice 9)
+- Soft delete with 30-day grace period for accounts (Slice 9)
+- Reports, dashboard, recurring transactions, budgets (Slices 3, 6, 10)
+- CSV bulk import — native AND bank-statement formats (Slice 7, post-14)
+- Prod profile + CI/CD pipeline + non-root Docker stack (Slice 11)
+- Angular 17 frontend (Slice 2+)
+- Custom month boundary day (Slice 14)
+
+Still genuinely future / not implemented:
+
+- Account / wallet entities and FX conversion (currency is display-only)
+- Optimistic locking / `@Version` (still last-write-wins on concurrent PUT)
+- Refresh-token rotation per use, idempotency keys, audit columns
+- Per-device session list with granular revocation
+- Persistent outbox / SMTP retry-on-transient-failure
+- Observability — Micrometer / Prometheus / OpenTelemetry
+- Health, fitness, diary, reminders, goals verticals
 
 ## Personal Preferences
 
