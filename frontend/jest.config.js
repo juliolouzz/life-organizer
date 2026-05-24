@@ -1,7 +1,11 @@
 /** @type {import('jest').Config} */
 module.exports = {
   preset: 'jest-preset-angular',
-  setupFilesAfterEach: ['<rootDir>/setup-jest.ts'],
+  // setup-jest.ts wires up TestBed via jest-preset-angular. It MUST run after
+  // Jest's globals are installed, hence setupFilesAfterEnv (the previous typo
+  // "setupFilesAfterEach" was silently ignored, so TestBed-using component
+  // specs blew up with "Cannot read 'ngModule' of null").
+  setupFilesAfterEnv: ['<rootDir>/setup-jest.ts'],
   testEnvironmentOptions: { customExportConditions: ['node'] },
   testMatch: ['<rootDir>/src/**/*.spec.ts'],
   moduleNameMapper: {
