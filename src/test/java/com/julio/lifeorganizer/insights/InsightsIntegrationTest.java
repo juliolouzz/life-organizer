@@ -54,13 +54,18 @@ class InsightsIntegrationTest extends AbstractIntegrationTest {
         JsonNode body = get("/api/v1/insights/summary?from=2026-05-01&to=2026-05-31");
         JsonNode d = body.get("data");
 
+        // Slice 14 contract:
+        //   totalExpense = EXPENSE rows + SAVINGS rows
+        //   totalSavings = SAVINGS rows only (subset of totalExpense, for the Saved card)
+        //   net          = totalIncome - totalExpense
+        // Raw seed: INCOME 5500 / EXPENSE 2122.50 / SAVINGS 700
         assertThat(d.get("totalIncome").decimalValue()).isEqualByComparingTo("5500.00");
-        assertThat(d.get("totalExpense").decimalValue()).isEqualByComparingTo("2122.50");
+        assertThat(d.get("totalExpense").decimalValue()).isEqualByComparingTo("2822.50");
         assertThat(d.get("totalSavings").decimalValue()).isEqualByComparingTo("700.00");
-        // Slice 5: net = income - expense - savings
         assertThat(d.get("net").decimalValue()).isEqualByComparingTo("2677.50");
         assertThat(d.get("incomeCount").asLong()).isEqualTo(3L);
-        assertThat(d.get("expenseCount").asLong()).isEqualTo(4L);
+        // expenseCount includes the SAVINGS rows so the card caption matches the total.
+        assertThat(d.get("expenseCount").asLong()).isEqualTo(6L);
         assertThat(d.get("savingsCount").asLong()).isEqualTo(2L);
 
         JsonNode prev = d.get("previousPeriod");
@@ -68,6 +73,42 @@ class InsightsIntegrationTest extends AbstractIntegrationTest {
         assertThat(prev.get("to").asText()).isEqualTo("2026-04-30");
         assertThat(prev.get("totalIncome").decimalValue()).isEqualByComparingTo("0");
         assertThat(prev.get("totalExpense").decimalValue()).isEqualByComparingTo("0");
+        assertThat(prev.get("totalSavings").decimalValue()).isEqualByComparingTo("0");
+        assertThat(prev.get("net").decimalValue()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void summary_netIsIncomeMinusExpensePlusSavings_simpleSeed() throws Exception {
+        // Tight, isolated assertion of the Slice 14 contract. Seeds 1 of each type
+        // for a brand-new user so existing seed in @BeforeEach is irrelevant.
+        String email = "net" + System.nanoTime() + "@example.com";
+        http.postForEntity("/api/v1/auth/register",
+                Map.of("email", email, "password", "S3cretValue", "displayName", "Net"),
+                String.class);
+        String localToken = json.readTree(http.postForEntity("/api/v1/auth/login",
+                        Map.of("email", email, "password", "S3cretValue"), String.class).getBody())
+                .get("data").get("accessToken").asText();
+
+        // Use the local token from this point forward.
+        createTxWithToken(localToken, "INCOME",  "1000.00", "Salary",    "pay",      "2026-06-01");
+        createTxWithToken(localToken, "EXPENSE",  "200.00", "Food",      "groceries", "2026-06-02");
+        createTxWithToken(localToken, "SAVINGS",   "50.00", "Emergency", "transfer",  "2026-06-03");
+
+        JsonNode d = json.readTree(http.exchange(
+                "/api/v1/insights/summary?from=2026-06-01&to=2026-06-30",
+                HttpMethod.GET,
+                new HttpEntity<>(authHeaders(localToken)),
+                String.class).getBody()).get("data");
+
+        assertThat(d.get("totalIncome").decimalValue()).isEqualByComparingTo("1000.00");
+        // 200 EXPENSE + 50 SAVINGS = 250
+        assertThat(d.get("totalExpense").decimalValue()).isEqualByComparingTo("250.00");
+        assertThat(d.get("totalSavings").decimalValue()).isEqualByComparingTo("50.00");
+        // net = income - (expense + savings) = 1000 - 250 = 750
+        assertThat(d.get("net").decimalValue()).isEqualByComparingTo("750.00");
+        assertThat(d.get("incomeCount").asLong()).isEqualTo(1L);
+        assertThat(d.get("expenseCount").asLong()).isEqualTo(2L); // 1 expense + 1 savings
+        assertThat(d.get("savingsCount").asLong()).isEqualTo(1L);
     }
 
     @Test
@@ -188,13 +229,24 @@ class InsightsIntegrationTest extends AbstractIntegrationTest {
 
     private void createTx(String type, String amount, String category, String description, String date)
             throws Exception {
+        createTxWithToken(token, type, amount, category, description, date);
+    }
+
+    private void createTxWithToken(String bearer, String type, String amount, String category,
+                                   String description, String date) throws Exception {
         HttpHeaders h = new HttpHeaders();
-        h.setBearerAuth(token);
+        h.setBearerAuth(bearer);
         h.setContentType(MediaType.APPLICATION_JSON);
         http.exchange("/api/v1/transactions", HttpMethod.POST,
                 new HttpEntity<>(Map.of(
                         "amount", amount, "type", type,
                         "category", category, "description", description,
                         "transactionDate", date), h), String.class);
+    }
+
+    private HttpHeaders authHeaders(String bearer) {
+        HttpHeaders h = new HttpHeaders();
+        h.setBearerAuth(bearer);
+        return h;
     }
 }

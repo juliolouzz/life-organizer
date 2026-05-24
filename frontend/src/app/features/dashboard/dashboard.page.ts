@@ -2,8 +2,8 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  OnInit,
   computed,
-  effect,
   inject,
   signal
 } from '@angular/core';
@@ -302,7 +302,7 @@ import { Transaction, TransactionsService } from '../transactions/transactions.s
     `
   ]
 })
-export class DashboardPage {
+export class DashboardPage implements OnInit {
   private readonly insights = inject(InsightsService);
   private readonly txs = inject(TransactionsService);
   private readonly dialog = inject(MatDialog);
@@ -312,10 +312,6 @@ export class DashboardPage {
 
   protected readonly initialPreset: PeriodPreset = 'this_month';
   protected readonly boundaryDay = computed(() => this.auth.currentUser()?.monthBoundaryDay ?? 1);
-
-  // Whether the user has picked a custom range (in which case we DON'T want to
-  // override it when the boundary day finishes loading).
-  private readonly isCustom = signal(false);
 
   protected readonly summary = signal<Summary | null>(null);
   protected readonly categories = signal<CategoryTotal[]>([]);
@@ -374,7 +370,9 @@ export class DashboardPage {
 
   constructor() {
     // Single subscription for the whole component's lifetime. switchMap
-    // cancels the previous in-flight request whenever a new range arrives.
+    // cancels any in-flight request when a new range arrives, so the stat
+    // cards, chart, donut, and recent list can never be from two different
+    // fetches.
     this.fetchRequest$
       .pipe(
         tap(() => this.loading.set(true)),
@@ -401,26 +399,23 @@ export class DashboardPage {
         },
         error: () => this.loading.set(false)
       });
-
-    // When the user's accounting cycle finishes loading (currentUser arrives
-    // after ngOnInit), re-seed the active range from the new boundary - unless
-    // the user has already picked a custom range, in which case we leave it.
-    effect(() => {
-      const day = this.boundaryDay();
-      if (this.isCustom()) return;
-      this.onRange(rangeForPresetWithBoundary(this.initialPreset, day));
-    });
   }
 
-  protected onRange(range: DateRange, custom = false): void {
-    this.isCustom.set(custom);
+  ngOnInit(): void {
+    // Kick off the first fetch with the user's accounting cycle. By the time
+    // the dashboard mounts post-login, AuthService.currentUser is already set
+    // (login() chains a /me call), so boundaryDay() returns the real value.
+    this.onRange(rangeForPresetWithBoundary(this.initialPreset, this.boundaryDay()));
+  }
+
+  protected onRange(range: DateRange): void {
     this.range.set(range);
     this.fetchRequest$.next(range);
   }
 
   /** Called by the period selector for both presets and custom apply. */
   protected onPeriodChange(change: PeriodChange): void {
-    this.onRange(change.range, change.preset === 'custom');
+    this.onRange(change.range);
   }
 
   protected openQuickAdd(): void {

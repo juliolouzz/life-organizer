@@ -1,5 +1,5 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, Input, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, inject } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
@@ -135,11 +135,16 @@ export class StatCardComponent {
 
   private readonly auth = inject(AuthService);
   private readonly pipe = new MoneyBrlPipe(this.auth);
-  protected readonly _ = signal(null);
 
-  protected rendered = computed<string | null>(() => {
+  /**
+   * Method (not a computed) so it re-runs on every change-detection pass.
+   * The previous `computed` read plain @Input properties, which signals do
+   * NOT track - the result was that the value never updated when the parent
+   * passed a new amount via the input binding.
+   */
+  protected rendered(): string | null {
     if (this.formattedValue !== null) return this.formattedValue;
     if (this.value === null || this.value === undefined) return null;
     return this.pipe.transform(this.value as number | string, this.sign);
-  });
+  }
 }

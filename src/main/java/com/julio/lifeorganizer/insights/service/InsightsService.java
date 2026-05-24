@@ -43,19 +43,29 @@ public class InsightsService {
         LocalDate prevFrom = prevTo.minusDays(span - 1);
         Totals previous = totalsFor(userId, prevFrom, prevTo);
 
+        // Domain model (per the project owner): a SAVINGS transaction is money
+        // that left the spending account, so it counts as an expense. The Saved
+        // card is a subset of the Expenses card showing the savings portion.
+        //
+        //   totalIncome  = sum of INCOME rows
+        //   totalExpense = sum of EXPENSE rows + sum of SAVINGS rows
+        //   totalSavings = sum of SAVINGS rows (subset of totalExpense)
+        //   net          = totalIncome - totalExpense
         return new SummaryResponse(
                 from, to,
-                current.income(), current.expense(), current.savings(),
-                netOf(current),
-                current.incomeCount(), current.expenseCount(), current.savingsCount(),
+                current.income(),
+                current.expense().add(current.savings()),
+                current.savings(),
+                current.income().subtract(current.expense()).subtract(current.savings()),
+                current.incomeCount(),
+                current.expenseCount() + current.savingsCount(),
+                current.savingsCount(),
                 new PeriodTotals(prevFrom, prevTo,
-                        previous.income(), previous.expense(), previous.savings(),
-                        netOf(previous))
+                        previous.income(),
+                        previous.expense().add(previous.savings()),
+                        previous.savings(),
+                        previous.income().subtract(previous.expense()).subtract(previous.savings()))
         );
-    }
-
-    private static BigDecimal netOf(Totals t) {
-        return t.income().subtract(t.expense()).subtract(t.savings());
     }
 
     public List<CategoryTotal> byCategory(Long userId, LocalDate from, LocalDate to) {
