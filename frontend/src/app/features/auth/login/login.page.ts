@@ -6,7 +6,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { ErrorCode } from '../../../core/api/error-codes';
 import { AuthService } from '../../../core/auth/auth.service';
@@ -181,6 +181,7 @@ export class LoginPage {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly showPassword = signal(false);
   protected readonly submitting = signal(false);
@@ -203,7 +204,12 @@ export class LoginPage {
     this.auth.login(this.form.getRawValue()).subscribe({
       next: () => {
         this.submitting.set(false);
-        this.router.navigate(['/dashboard']);
+        // Honour the returnUrl placed by authGuard when the user was sent
+        // here from a guarded route. Default to the dashboard for direct
+        // logins. The URL is internal-only (a route path), so navigateByUrl
+        // is safe.
+        const target = this.route.snapshot.queryParamMap.get('returnUrl') ?? '/dashboard';
+        this.router.navigateByUrl(target);
       },
       error: (err: unknown) => {
         this.submitting.set(false);
