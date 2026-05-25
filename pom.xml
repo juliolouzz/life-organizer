@@ -112,7 +112,7 @@
         <dependency>
             <groupId>com.opencsv</groupId>
             <artifactId>opencsv</artifactId>
-            <version>5.10</version>
+            <version>5.12.0</version>
         </dependency>
 
         <!-- Slice 10: Thymeleaf templates for the PDF report and OpenHTMLtoPDF for rendering -->
